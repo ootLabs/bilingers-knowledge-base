@@ -34,6 +34,7 @@ AREAS: list[tuple[str, list[str]]] = [
             "frontend/Dockerfile",
             "db/init/*.sql",
             "scripts/*.py",
+            ".githooks/*",
         ],
     ),
     (
@@ -61,6 +62,26 @@ EXCLUDED_DIRS = {"node_modules", ".next", "__pycache__", ".venv", "venv", ".git"
 
 # Generated or lock files: real, but nothing an agent needs a description of.
 EXCLUDED_NAMES = {"next-env.d.ts", "package-lock.json"}
+
+# Top-level directories AREAS already covers, plus those holding no mappable
+# source. A new directory outside this set means the patterns above have a hole:
+# the script would happily report "in sync" while ignoring every file in it.
+# That silent pass is the failure mode this guard exists to prevent.
+KNOWN_TOP_LEVEL = {
+    "backend",
+    "frontend",
+    "db",
+    "scripts",
+    ".githooks",
+    "docs",
+    ".cursor",
+    ".claude",
+    ".github",
+    ".git",
+    "postgres-data",
+}
+
+SOURCE_SUFFIXES = {".py", ".ts", ".tsx", ".css", ".mjs", ".sql", ".yml", ".yaml"}
 
 # Matches a table row whose first cell is a backticked path: | `path/to/file` | ... |
 MAP_ROW = re.compile(r"^\|\s*`([^`]+)`")
@@ -103,7 +124,37 @@ def files_in_maps() -> dict[str, str]:
     return listed
 
 
+def unknown_areas() -> list[str]:
+    """Top-level directories holding source that no AREAS pattern reaches."""
+    found = []
+    for entry in sorted(REPO_ROOT.iterdir()):
+        if not entry.is_dir():
+            continue
+        if entry.name in KNOWN_TOP_LEVEL or entry.name in EXCLUDED_DIRS:
+            continue
+        has_source = any(
+            path.is_file() and path.suffix in SOURCE_SUFFIXES and not is_excluded(path)
+            for path in entry.rglob("*")
+        )
+        if has_source:
+            found.append(entry.name)
+    return found
+
+
 def main() -> int:
+    unknown = unknown_areas()
+    if unknown:
+        print("New top-level directories the map does not cover:")
+        for name in unknown:
+            print(f"  {name}/")
+        print()
+        print(
+            "Teach the script about them: add patterns to AREAS and a name to\n"
+            "KNOWN_TOP_LEVEL in scripts/check_map.py, then create the matching\n"
+            "docs/map/ file. Until then their files are invisible to the map."
+        )
+        return 1
+
     on_disk = files_on_disk()
     in_maps = files_in_maps()
 

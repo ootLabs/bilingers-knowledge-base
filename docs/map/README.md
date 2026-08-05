@@ -32,6 +32,10 @@ A stale map is worse than no map: it sends the next agent to a file that moved. 
 python scripts/check_map.py
 ```
 
-It reports files missing from the map, rows pointing at deleted files, and rows filed under the wrong area. Exit code 1 means drift.
+It reports files missing from the map, rows pointing at deleted files, rows filed under the wrong area, and new top-level directories it was never taught to scan. Exit code 1 means drift.
 
-**The rule:** add, rename, move, or delete a file → update the map row **in the same commit**. Run the check before committing. A change is not done while the check fails.
+You do not have to remember to run it: `.githooks/pre-commit` blocks the commit on drift, enabled once per clone with `git config core.hooksPath .githooks`.
+
+**The rule:** add, rename, move, or delete a file → update the map row **in the same commit**. A change is not done while the check fails.
+
+Adding a whole new top-level directory (say `worker/`) needs one extra step: add its patterns to `AREAS` and its name to `KNOWN_TOP_LEVEL` in the script, and give it a `docs/map/<area>.md`. The script refuses to pass until you do — otherwise it would report "in sync" while ignoring every file in there.

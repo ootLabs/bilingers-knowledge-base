@@ -19,10 +19,15 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-08-05 — map check enforced by a pre-commit hook
+**Done:** `.githooks/pre-commit` blocks a commit while the map disagrees with the repo (enable per clone: `git config core.hooksPath .githooks`); `check_map.py` now also fails on a new top-level directory it was never taught to scan.
+**Decisions:** Enforce at commit time rather than trusting the definition of done — an unenforced map decays, and a wrong map costs more than no map. The unknown-directory guard turns a silent pass into a loud failure, which was the script's one remaining blind spot.
+**Watch out:** Hooks are not shared by git, so every clone needs the `core.hooksPath` line — it is in the README and CONTRIBUTING setup steps.
+
 ## 2026-08-05 — agent-facing docs restructure
 **Done:** `AGENTS.md` is now the single source of rules (`CLAUDE.md` imports it, `.cursor/rules/` points at it); `docs/map/` splits the repo map by area; `scripts/check_map.py` enforces it; `AI_NOTES.md` replaced by this capped log.
 **Decisions:** Split maps by area so a frontend change never loads backend rows — startup context dropped from ~2 370 to ~1 500 tokens with everything else pulled on demand. Map accuracy is enforced by a script, not by good intentions, because an unenforced map goes stale and then actively misleads.
-**Watch out:** `check_map.py` has a hardcoded `AREAS` list — a new top-level source directory needs a line added there or its files are silently unmapped.
+**Watch out:** `check_map.py` scans a hardcoded `AREAS` list — a new top-level source directory needs patterns added there (the guard added the same day makes this fail loudly instead of silently).
 
 ## 2026-08-05 — project scaffold
 **Done:** Docker Compose with three services (Next.js, FastAPI, PostgreSQL) verified running; health endpoints incl. database probe; README, CONTRIBUTING, architecture, conventions, and the `docs/llm/` design wiki.

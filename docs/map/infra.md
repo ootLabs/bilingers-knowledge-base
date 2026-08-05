@@ -9,7 +9,8 @@ Docker Compose runs everything. There is no supported way to run this project ou
 | `backend/Dockerfile` | python:3.12-slim, installs `requirements.txt`, runs uvicorn |
 | `frontend/Dockerfile` | node:22-alpine, `npm install`, runs `npm run dev` |
 | `db/init/01_schema.sql` | Bootstrap SQL — creates `health_probe`; runs **only** on an empty volume |
-| `scripts/check_map.py` | Drift check between the repo and `docs/map/*.md`; exit 1 on drift |
+| `scripts/check_map.py` | Drift check between the repo and `docs/map/*.md`; exit 1 on drift. `AREAS` + `KNOWN_TOP_LEVEL` define what it scans |
+| `.githooks/pre-commit` | Runs `check_map.py` and blocks the commit on drift; needs `git config core.hooksPath .githooks` once per clone |
 
 ## Things that bite
 

@@ -63,7 +63,7 @@ Full workflow: `CONTRIBUTING.md`.
 A change is finished when **all** of these hold:
 
 1. The code works — you ran it, you didn't just read the diff.
-2. `python scripts/check_map.py` exits 0. Added, moved, renamed, or deleted a file → its map row changed in the same commit.
+2. `python scripts/check_map.py` exits 0 — the pre-commit hook blocks the commit otherwise. Added, moved, renamed, or deleted a file → its map row changed in the same commit.
 3. Behavior or structure changed → the matching `docs/` file is updated. Built part of the AI layer → the matching `docs/llm/` note now describes what exists, not what was planned.
 4. New environment variable → it is in `.env.example`.
 5. Committed.

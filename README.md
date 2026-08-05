@@ -26,7 +26,8 @@ A free educational app for parents and carers, built with the Bilingual Future F
 ## Run it
 
 ```bash
-cp .env.example .env      # Windows PowerShell: Copy-Item .env.example .env
+cp .env.example .env                  # Windows PowerShell: Copy-Item .env.example .env
+git config core.hooksPath .githooks   # once per clone: enables the map check
 docker compose up --build
 ```
 

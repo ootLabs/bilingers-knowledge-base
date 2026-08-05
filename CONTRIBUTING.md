@@ -18,10 +18,13 @@ No mixing the two inside one artifact. A Polish comment in English code, or an E
 
 ```bash
 cp .env.example .env
+git config core.hooksPath .githooks   # once per clone
 docker compose up --build
 ```
 
-That is the whole setup — see [`README.md`](README.md) for endpoints and everyday commands. Run everything through Docker; a local Node or Python install is not supported and will drift from what CI and other developers see.
+See [`README.md`](README.md) for endpoints and everyday commands. Run everything through Docker; a local Node or Python install is not supported and will drift from what other developers see.
+
+The `core.hooksPath` line enables the pre-commit hook that blocks a commit while `docs/map/` disagrees with the repository. Git does not share hooks automatically, so this is per clone — run it or the map check is on your honour.
 
 ---
 
@@ -64,7 +67,7 @@ Nothing in this repository may credit or mention an AI assistant or a code-gener
 ## Before you open a pull request
 
 1. The change works — you started the stack and exercised it, not just read the diff.
-2. `python scripts/check_map.py` exits 0. Added, moved, renamed, or deleted a file → its row in `docs/map/` changed in the same commit.
+2. `python scripts/check_map.py` exits 0 — the pre-commit hook enforces this. Added, moved, renamed, or deleted a file → its row in `docs/map/` changed in the same commit. Added a whole new top-level directory → teach `AREAS` and `KNOWN_TOP_LEVEL` in the script about it and give it its own `docs/map/` file.
 3. Affected files under `docs/` are updated. Stale docs are worse than none.
 4. `.env.example` lists any new environment variable (with a safe placeholder, never a real secret).
 5. Larger task → one entry at the top of `docs/log.md`, following the format defined there.

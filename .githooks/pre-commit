@@ -1,0 +1,25 @@
+#!/bin/sh
+# Blocks a commit while docs/map/ disagrees with the repository.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+# The map is only useful if it is true. Catching drift here means it is never
+# committed, instead of being discovered by whoever it misleads next.
+
+if command -v python >/dev/null 2>&1; then
+    PY=python
+elif command -v python3 >/dev/null 2>&1; then
+    PY=python3
+else
+    echo "pre-commit: python not found, skipping the map check." >&2
+    exit 0
+fi
+
+if ! "$PY" scripts/check_map.py; then
+    echo >&2
+    echo "Commit blocked: docs/map/ is out of date. Fix the rows above, then commit again." >&2
+    echo "Deliberate exception: git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0
