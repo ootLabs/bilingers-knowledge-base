@@ -1,0 +1,95 @@
+# Contributing to Bilingers
+
+Read [`CLAUDE.md`](CLAUDE.md) first — it is the project constitution and holds the map of where things live. This file covers the mechanics: branches, commits, review.
+
+---
+
+## Language
+
+- **Repository: English.** Code, identifiers, comments, commit messages, documentation.
+- **User-facing content: Polish.** UI copy, labels, seed data shown in the product.
+- **Chat / discussion: whatever you like.** It never changes the two rules above.
+
+No mixing the two inside one artifact. A Polish comment in English code, or an English label in the Polish UI, gets sent back in review.
+
+---
+
+## Getting set up
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+That is the whole setup — see [`README.md`](README.md) for endpoints and everyday commands. Run everything through Docker; a local Node or Python install is not supported and will drift from what CI and other developers see.
+
+---
+
+## Branches
+
+Never commit non-trivial work straight to `main`. `main` must always be in a working state.
+
+```
+feat/<short>       new functionality
+fix/<short>        bug fix
+refactor/<short>   behavior-preserving change
+chore/<short>      tooling, config, dependencies
+docs/<short>       documentation only
+```
+
+Short, lowercase, hyphenated: `feat/chat-endpoint`, `fix/cors-origins`.
+
+---
+
+## Commits
+
+- One commit = one logical change. Commit often, in small steps.
+- Title: `type: short, on-point summary`, ≤ ~60 characters, imperative mood, English, no trailing period.
+- Types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`, `perf`.
+- **No body** unless the change is large, functionally important, or non-obvious — then 2–4 bullets.
+
+```
+feat: chat message endpoint
+fix: cors origins parsing
+refactor: extract knowledge base loader
+chore: bump fastapi to 0.115
+```
+
+### Hard rule — no tool or AI authorship
+
+Nothing in this repository may credit or mention an AI assistant or a code-generation tool: not in commit messages, pull requests, code, comments, or documentation. No `Co-Authored-By`, no "generated with". `.claude/settings.json` sets `includeCoAuthoredBy: false`; leave it that way.
+
+---
+
+## Before you open a pull request
+
+1. The change works — you started the stack and exercised it, not just read the diff.
+2. `CLAUDE.md` → "Project map" has a row for any new feature or module.
+3. Affected files under `docs/` are updated. Stale docs are worse than none.
+4. `.env.example` lists any new environment variable (with a safe placeholder, never a real secret).
+5. Larger task → an entry at the top of `AI_NOTES.md`.
+
+A pull request describes **what changed and why**, in a few sentences. Link the issue if there is one.
+
+---
+
+## Code style
+
+Details in [`docs/conventions.md`](docs/conventions.md). The short version:
+
+- Small files, single responsibility. Past ~300 lines or doing two things → split it.
+- One domain = one module. Don't mix UI, logic, and data access in one file.
+- Comments explain *why*, never *what*.
+- Check the project map before building — the thing may already exist.
+
+---
+
+## Scope discipline
+
+This repository is intentionally a skeleton. Do not add a vector database, an LLM SDK, model API calls, or authentication without agreeing on it first — see "What is deliberately missing" in the README. Design notes for the AI layer live in [`docs/llm/`](docs/llm/README.md); extend the notes before extending the code.
+
+---
+
+## Secrets
+
+Never commit `.env`, API keys, database dumps, or personal data. `.env.example` documents the *names* of variables and nothing else. The project handles data about families and children — when in doubt, collect less.
