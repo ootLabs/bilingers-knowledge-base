@@ -135,13 +135,37 @@ A pull request describes **what changed and why**, in a few sentences. Link the 
 
 CI runs on every pull request: repository checks, backend tests against real PostgreSQL, frontend typecheck plus tests plus build, and a smoke test that starts all three containers and talks to them over HTTP. A red pipeline means the branch does not merge.
 
-**Repository settings, not files.** Nobody can commit these, so they need doing once in GitHub:
+### On GitHub
 
-- Default branch: `dev`, so pull requests target it by default instead of production.
-- Branch protection on **both** `main` and `dev`: require the four CI jobs to pass, require a pull request, block direct pushes.
-- `main` additionally: no force pushes, no deletion.
+Repository: <https://github.com/ootLabs/bilingers-knowledge-base>. Default branch is `dev`, so a new pull request targets it automatically. Retarget to `main` only when you are releasing.
 
-Without protection, CI is only advice and eventually someone merges past a red run.
+What you see when you open a pull request:
+
+- Four checks appear and take about a minute in total. All runs are under the [Actions tab](https://github.com/ootLabs/bilingers-knowledge-base/actions).
+- The merge button stays disabled until all four are green. On `main` it also stays disabled while the branch is behind, so you merge `main` into your branch first.
+- A failed check links straight to its log. The smoke job also prints the container logs when it fails, so start there when it is red: it usually means the stack did not come up rather than a broken test.
+- The description is prefilled from `.github/pull_request_template.md`. Work the checklist rather than deleting it.
+
+Use a **merge commit**, not squash or rebase. Releases are supposed to be one identifiable commit on `main`, and squashing a release PR would flatten the whole history into it.
+
+### What is enforced on GitHub
+
+These are repository settings, not files in this repo. They are already applied:
+
+| | `main` | `dev` |
+|---|---|---|
+| Four CI jobs must pass | yes | yes |
+| Pull request required | yes, 0 approvals | no |
+| Branch must be up to date before merging | yes | no |
+| Force push, deletion | blocked | blocked |
+| Rules apply to admins | **yes** | no |
+| Conversation resolution required | yes | no |
+
+`main` binds admins too, so nobody, including the owner, can push to production past a red pipeline. Releasing means opening a pull request from `dev` into `main` and merging it there.
+
+On `dev` admins can still push directly, which is the deliberate difference in strictness. Everyone else goes through a pull request with green checks.
+
+If a genuine emergency needs the `main` rules lifted, turn "Include administrators" off in branch protection, do the fix, and turn it back on. Doing that should feel deliberate, which is the point.
 
 ---
 
