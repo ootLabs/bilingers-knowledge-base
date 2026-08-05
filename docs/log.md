@@ -19,6 +19,11 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-08-05 - branch model: main as production, dev as integration
+**Done:** `dev` created from `main`; branch rules rewritten in `AGENTS.md`, `CONTRIBUTING.md`, and the Cursor rules; CI now also triggers on pushes to `dev`. First real CI run on GitHub passed all four jobs in 63s.
+**Decisions:** Feature branches cut from `dev` and merge back there; `main` only takes release merges and hotfixes, with `--no-ff` so its log reads as releases rather than individual commits.
+**Watch out:** After a `hotfix/` merges to `main`, merge `main` back into `dev` at once or the next release reverts the fix. Branch protection and the default branch are GitHub settings nobody can commit; until they are set, CI is advisory.
+
 ## 2026-08-05 - test suite, coverage gates, and CI
 **Done:** 23 backend tests (unit, API, 2 integration) at 100% coverage with a 90% gate; 8 frontend tests via Vitest plus a typecheck; `scripts/smoke_test.py` drives the running stack over HTTP; `.github/workflows/ci.yml` runs all of it on every PR; `docs/testing.md` explains the layers; `frontend/package-lock.json` finally exists so Docker and CI both use `npm ci`.
 **Decisions:** Integration tests skip rather than fail without a database, so the suite is usable with nothing running, while CI always provides real PostgreSQL. Frontend branch-coverage threshold is set lower than the rest because v8 counts unreachable branches in transpiled JSX, and faking tests to hit a number hides more than it reveals.
