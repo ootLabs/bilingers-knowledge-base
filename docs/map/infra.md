@@ -15,20 +15,7 @@ Docker Compose runs everything. There is no supported way to run this project ou
 | `.githooks/pre-commit` | Runs both checks and blocks the commit on failure; needs `git config core.hooksPath .githooks` once per clone |
 | `.github/workflows/ci.yml` | CI: repo checks, backend pytest against real PostgreSQL, frontend typecheck/tests/build, stack smoke test |
 
-## Commands
-
-```bash
-docker compose up -d --build      # start everything in the background
-docker compose logs -f backend    # follow one service
-docker compose restart backend    # after a config change
-docker compose up -d --build backend            # after a dependency change
-docker compose up -d --build --renew-anon-volumes frontend   # after a package.json change
-docker compose down               # stop, keep the data
-docker compose down -v            # stop and wipe the database volume
-docker compose exec db psql -U bilingers -d bilingers        # psql shell
-```
-
-Test commands live in [`../testing.md`](../testing.md).
+Everyday commands live in [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), test commands in [`../testing.md`](../testing.md).
 
 ## Things that bite
 

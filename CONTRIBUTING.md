@@ -22,9 +22,35 @@ git config core.hooksPath .githooks   # once per clone
 docker compose up --build
 ```
 
-See [`README.md`](README.md) for endpoints and everyday commands. Run everything through Docker; a local Node or Python install is not supported and will drift from what other developers see.
+Endpoints are in [`README.md`](README.md). Run everything through Docker; a local Node or Python install is not supported and will drift from what other developers see.
 
 The `core.hooksPath` line enables the pre-commit hook, which blocks a commit when `docs/map/` disagrees with the repository or when a banned typographic character slipped in. Git does not share hooks automatically, so this is per clone. Run it, or both checks are on your honour.
+
+---
+
+## Everyday commands
+
+```bash
+docker compose up -d              # start in the background
+docker compose logs -f backend    # follow one service's logs
+docker compose restart backend    # after a config change
+docker compose down               # stop, data survives
+docker compose down -v            # stop and wipe the database volume
+docker compose exec db psql -U bilingers -d bilingers   # psql shell
+```
+
+Rebuilds, because a restart is not enough when dependencies change:
+
+```bash
+docker compose up -d --build backend                          # requirements changed
+docker compose up -d --build --renew-anon-volumes frontend    # package.json changed
+```
+
+The `--renew-anon-volumes` flag matters: `node_modules` lives in an anonymous volume that survives a plain rebuild, so without it the container keeps the old packages and you debug a ghost.
+
+`db/init/*.sql` runs **only** on an empty volume. After changing it, `docker compose down -v` and start again, or the change appears to do nothing.
+
+Tests: [`docs/testing.md`](docs/testing.md). All of them run in CI on every pull request.
 
 ---
 

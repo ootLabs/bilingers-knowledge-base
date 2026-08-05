@@ -20,7 +20,7 @@ docker compose up --build
 | Backend | FastAPI, Python 3.12 | <http://localhost:8000> ([docs](http://localhost:8000/docs), [health](http://localhost:8000/health)) |
 | Database | PostgreSQL 16 | `localhost:5432` |
 
-Both apps hot reload from the host. Commands, gotchas, and how the services fit together: [`docs/map/infra.md`](docs/map/infra.md).
+Both apps hot reload from the host. Everyday commands and gotchas: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Where everything is
 
