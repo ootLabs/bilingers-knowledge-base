@@ -1,6 +1,6 @@
 # Contributing to Bilingers
 
-Read [`CLAUDE.md`](CLAUDE.md) first — it is the project constitution and holds the map of where things live. This file covers the mechanics: branches, commits, review.
+Read [`AGENTS.md`](AGENTS.md) first — it is the project constitution and routes you to the right documentation. This file covers the mechanics: branches, commits, review.
 
 ---
 
@@ -64,10 +64,10 @@ Nothing in this repository may credit or mention an AI assistant or a code-gener
 ## Before you open a pull request
 
 1. The change works — you started the stack and exercised it, not just read the diff.
-2. `CLAUDE.md` → "Project map" has a row for any new feature or module.
+2. `python scripts/check_map.py` exits 0. Added, moved, renamed, or deleted a file → its row in `docs/map/` changed in the same commit.
 3. Affected files under `docs/` are updated. Stale docs are worse than none.
 4. `.env.example` lists any new environment variable (with a safe placeholder, never a real secret).
-5. Larger task → an entry at the top of `AI_NOTES.md`.
+5. Larger task → one entry at the top of `docs/log.md`, following the format defined there.
 
 A pull request describes **what changed and why**, in a few sentences. Link the issue if there is one.
 
@@ -80,7 +80,7 @@ Details in [`docs/conventions.md`](docs/conventions.md). The short version:
 - Small files, single responsibility. Past ~300 lines or doing two things → split it.
 - One domain = one module. Don't mix UI, logic, and data access in one file.
 - Comments explain *why*, never *what*.
-- Check the project map before building — the thing may already exist.
+- Check [`docs/map/`](docs/map/README.md) before building — the thing may already exist, and the map finds it faster than a search.
 
 ---
 

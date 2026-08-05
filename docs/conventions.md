@@ -45,7 +45,7 @@ components/         shared components (create when something is reused twice)
 lib/                API client, helpers
 ```
 
-Don't create empty folders ahead of need. Create them with the first file that belongs there, and add a row to the project map in `CLAUDE.md`.
+Don't create empty folders ahead of need. Create them with the first file that belongs there, and add a row to the matching file in [`map/`](map/README.md).
 
 ## Patterns
 

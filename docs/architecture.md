@@ -21,6 +21,8 @@ Target flow (most of it not built yet): the user opens the app → reads a short
 | Database bootstrap | SQL run once on an empty volume | `db/init/` |
 | Orchestration | Service definitions, ports, volumes, healthchecks | `docker-compose.yml` |
 
+File-level detail lives in [`map/`](map/README.md) — one file per area, so finding code doesn't mean reading this document.
+
 ## Data flow
 
 Today:
@@ -42,6 +44,10 @@ Planned addition, once the AI layer lands: the backend gains a retrieval step an
 | 2026-08-05 | Plain PostgreSQL, no vector extension | Nothing needs vectors yet. When retrieval arrives, evaluate `pgvector` in this same container before adding a fourth service |
 | 2026-08-05 | Dev-mode containers with host bind mounts and hot reload | Fast feedback while the shape is still moving; production images are a separate, later concern |
 | 2026-08-05 | Bootstrap SQL in `db/init/`, no migration tool | One table, no history to preserve. Introduce Alembic when the first real schema change appears |
+| 2026-08-05 | Stay on FastAPI rather than Django/DRF | The core interaction is a streamed chat response over async I/O, which Starlette does natively; Django's main draw here was the free admin panel, and that is one secondary screen, buildable in Next.js against the same API |
+| 2026-08-05 | `AGENTS.md` as the single source of agent rules; `CLAUDE.md` imports it, `.cursor/rules/` points at it | Duplicated rules drift apart silently, and then each tool behaves differently on the same repo |
+| 2026-08-05 | Repository map split by area in `docs/map/`, enforced by `scripts/check_map.py` | A single map file forces a frontend change to load backend rows; an unenforced map goes stale and then actively misdirects |
+| 2026-08-05 | Capped log (`docs/log.md`, 20 entries) instead of an unbounded journal | The journal was auto-loaded every session and grows without limit — ~35k tokens per session at 100 entries, paid even to edit one CSS variable |
 
 ## Integrations / external dependencies
 

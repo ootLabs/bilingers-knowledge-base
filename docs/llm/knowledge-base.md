@@ -34,4 +34,4 @@ Admin editing of the base is a planned feature (`Panel administracyjny`), so the
 
 ## When this gets built
 
-Fill in: the real format, where the content is stored, how ingestion runs, who can edit it, and how a change reaches users. Then add a row to `CLAUDE.md` → "Project map".
+Fill in: the real format, where the content is stored, how ingestion runs, who can edit it, and how a change reaches users. Then add the rows to `docs/map/backend.md`.

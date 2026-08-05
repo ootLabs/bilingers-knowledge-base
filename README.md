@@ -67,12 +67,18 @@ backend/            FastAPI service
 frontend/           Next.js app (App Router)
   app/              pages, layout, global styles
 db/init/            SQL executed on first database start
-docs/               architecture, conventions, LLM wiki
+docs/
+  map/              which file does what, split by area
+  llm/              design notes for the AI layer
+  architecture.md   modules, data flow, decisions
+  conventions.md    naming, structure, style
+  log.md            what changed and why (capped)
+scripts/            maintenance scripts, standard library only
 docker-compose.yml  the three services
 .env.example        every configurable variable
 ```
 
-Where each feature lives is tracked in `CLAUDE.md` → "Project map". Keep it current.
+Where each file lives and what it does is tracked in [`docs/map/`](docs/map/README.md), enforced by `python scripts/check_map.py`.
 
 ---
 
@@ -92,12 +98,15 @@ The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/READ
 
 ## Documentation
 
-- [`CLAUDE.md`](CLAUDE.md) — how we work + the project map (read first).
+- [`AGENTS.md`](AGENTS.md) — how we work, and where to look for everything else. **Read first.**
+- [`docs/map/`](docs/map/README.md) — which file does what, split by area. The fast way to find code.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — branches, commits, review.
 - [`docs/architecture.md`](docs/architecture.md) — modules, data flow, decisions.
 - [`docs/conventions.md`](docs/conventions.md) — naming, structure, style.
 - [`docs/llm/`](docs/llm/README.md) — knowledge base, retrieval, prompts, cost control.
-- [`AI_NOTES.md`](AI_NOTES.md) — running project journal.
+- [`docs/log.md`](docs/log.md) — what changed recently and why.
+
+`CLAUDE.md` and `.cursor/rules/` both point at `AGENTS.md`, so Claude Code and Cursor work from the same rules. Change `AGENTS.md`; never copy rules into the tool-specific files.
 
 ---
 

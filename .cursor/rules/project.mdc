@@ -1,0 +1,42 @@
+---
+description: Core project rules — languages, git, where to look, definition of done
+globs:
+alwaysApply: true
+---
+
+Full instructions: `AGENTS.md` in the repo root. It is the single source of truth — never duplicate rules into this file.
+
+## Where to look — do this instead of exploring
+
+Blind search is how a five-minute change becomes an hour. Start with the map for the area you're touching, and load only that one:
+
+- `docs/map/backend.md` — FastAPI service
+- `docs/map/frontend.md` — Next.js app
+- `docs/map/infra.md` — Docker, database, scripts, env vars
+- `docs/architecture.md` — how the system fits together
+- `docs/conventions.md` — naming, structure, patterns
+- `docs/llm/README.md` — anything AI: RAG, prompts, cost, quiz, i18n
+
+Map first, search second. If the map didn't have it, the map was wrong — fix it as part of your change.
+
+## Stage
+
+Skeleton. No vector DB, no LLM SDK, no model API calls, no auth, no quiz, no migrations, no tests — deliberately. Don't add them without an explicit request.
+
+## Languages
+
+Repository is **English** (code, comments, commits, docs) regardless of chat language. User-facing copy is **Polish**, and it lives in the frontend only — the backend returns data and keys, never sentences.
+
+## Git
+
+Branch `feat/|fix/|refactor/|chore/|docs/` + kebab-case. Commit title `type: short summary`, ≤ ~60 chars, English, imperative. One logical change per commit.
+
+**Never credit an AI or tool** in commits, PRs, code, comments, or docs.
+
+## Definition of done
+
+1. It runs — verified, not just read.
+2. `python scripts/check_map.py` exits 0 — file added/moved/deleted means its `docs/map/` row changed in the same commit.
+3. Behavior or structure changed → matching `docs/` file updated.
+4. New env var → in `.env.example`.
+5. Non-trivial task → one entry at the top of `docs/log.md` (capped at 20; format is in the file).

@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+__pycache__/
+.venv/
+venv/
+postgres-data/
+package-lock.json
+next-env.d.ts
+.env

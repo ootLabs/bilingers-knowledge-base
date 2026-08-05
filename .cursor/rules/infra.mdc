@@ -1,0 +1,25 @@
+---
+description: Docker, database, and scripts
+globs: docker-compose.yml,db/**,scripts/**,**/Dockerfile,.env.example
+alwaysApply: false
+---
+
+Map of this area: `docs/map/infra.md` — it also lists the gotchas below in full.
+
+## The three services
+
+`db` (postgres:16, healthcheck) · `backend` (FastAPI, :8000, `--reload`) · `frontend` (Next.js, :3000, dev server). Dev mode with host bind mounts; production images do not exist yet.
+
+## Things that bite
+
+- `db/init/*.sql` runs **only** on an empty volume. After editing: `docker compose down -v`, then `up`.
+- `DATABASE_URL` host is `db` — the compose service name, resolvable only inside the compose network.
+- `NEXT_PUBLIC_API_URL` is used by the browser — it must be host-reachable (`localhost:8000`).
+- `frontend` keeps the image's `node_modules` and `.next` as anonymous volumes. `package.json` changes need `--build`.
+
+## Rules
+
+- Every configurable value is an environment variable, listed in `.env.example` with a safe placeholder. Never a real secret, never a hardcoded value in a compose file.
+- New service → `docker-compose.yml` + a row in `docs/map/infra.md` + a decision line in `docs/architecture.md`.
+- Scripts in `scripts/` use the Python standard library only and run on the host without setup.
+- Schema changes currently live in `db/init/`. Introducing a migration tool is a recorded decision, not a silent addition.

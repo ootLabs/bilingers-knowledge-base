@@ -2,7 +2,7 @@
 
 > **Nothing here is implemented.** These are design notes for the AI layer: decisions to make, constraints to respect, and the shape we expect the code to take. Written in English, like the rest of the repo.
 >
-> Rule of this wiki: **the note comes before the code.** Before building a piece of the AI layer, fill in the matching file — the open questions, the chosen approach, the reason. After building it, update the file to describe what actually exists and link the code from `CLAUDE.md` → "Project map".
+> Rule of this wiki: **the note comes before the code.** Before building a piece of the AI layer, fill in the matching file — the open questions, the chosen approach, the reason. After building it, update the file to describe what actually exists and add the rows to `docs/map/`.
 
 ## Files
 

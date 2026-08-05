@@ -1,0 +1,31 @@
+---
+description: FastAPI backend conventions
+globs: backend/**
+alwaysApply: false
+---
+
+Map of this area: `docs/map/backend.md` — read it before searching for a file.
+
+## Layering
+
+`router → service → model`. Never the reverse, and a router never touches the database directly beyond a health probe.
+
+- `app/main.py` — assembly only: middleware, router includes. No business logic.
+- `app/routers/<domain>.py` — HTTP concerns: request/response, status codes.
+- `app/services/<domain>.py` — business logic. Create the folder with the first file.
+- `app/schemas/<domain>.py` — Pydantic request/response models.
+- `app/models/<domain>.py` — SQLAlchemy models.
+
+## Rules
+
+- Config comes from `app/config.py` (`settings`) only. No magic values, no `os.environ` scattered around. Every new setting also goes into `.env.example`.
+- Database access goes through the `get_session` dependency. No module-level sessions, no connections opened inside handlers.
+- Validate at the boundary with Pydantic; past the router, data is assumed valid.
+- Errors: services raise domain exceptions, routers translate them to `HTTPException`. Never return 200 with an error body.
+- Handlers stay sync until something is genuinely I/O-bound and async-capable. Never mark a handler `async` while calling blocking code inside it.
+- `snake_case` modules and functions, `PascalCase` classes, type hints on public functions.
+- Past ~300 lines or doing two things → split the file, and update the map row.
+
+## Running it
+
+Everything runs in Docker: `docker compose exec backend <cmd>`. A local Python install is not supported.
