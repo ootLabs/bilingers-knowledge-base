@@ -2,124 +2,40 @@
 
 A free educational app for parents and carers, built with the Bilingual Future Foundation. Users talk to an AI assistant grounded in the foundation's knowledge base, then check what they learned with a quiz that can end in a certificate.
 
-**Status: skeleton.** Three containers that build, start, and talk to each other - nothing more. No vector database, no LLM SDK, no model calls, no API keys. See "What is deliberately missing" below.
-
----
-
-## Stack
-
-| Service | Technology | Port |
-|---|---|---|
-| `frontend` | Next.js 15 (App Router, TypeScript) | 3000 |
-| `backend` | Python 3.12, FastAPI, SQLAlchemy | 8000 |
-| `db` | PostgreSQL 16 | 5432 |
-
----
-
-## Requirements
-
-- Docker Desktop (or Docker Engine) with Compose v2 - `docker compose version` must work.
-- Nothing else. Node and Python run inside the containers.
-
----
+**Status: skeleton.** Three containers, health endpoints, tests, CI. No vector database, no LLM SDK, no model calls. What is deliberately absent and why: [`AGENTS.md`](AGENTS.md).
 
 ## Run it
 
+Needs Docker with Compose v2. Nothing else: Node and Python live in the containers.
+
 ```bash
-cp .env.example .env                  # Windows PowerShell: Copy-Item .env.example .env
-git config core.hooksPath .githooks   # once per clone: enables the map check
+cp .env.example .env                  # PowerShell: Copy-Item .env.example .env
+git config core.hooksPath .githooks   # once per clone, enables the commit checks
 docker compose up --build
 ```
 
-First build takes a few minutes (npm install + pip install). Then:
+| | | |
+|---|---|---|
+| Frontend | Next.js 15 | <http://localhost:3000> |
+| Backend | FastAPI, Python 3.12 | <http://localhost:8000> ([docs](http://localhost:8000/docs), [health](http://localhost:8000/health)) |
+| Database | PostgreSQL 16 | `localhost:5432` |
 
-- Frontend - <http://localhost:3000>
-- Backend - <http://localhost:8000>
-- API docs (Swagger) - <http://localhost:8000/docs>
-- Health - <http://localhost:8000/health>
-- Health incl. database - <http://localhost:8000/health/db>
+Both apps hot reload from the host. Commands, gotchas, and how the services fit together: [`docs/map/infra.md`](docs/map/infra.md).
 
-Both services run in dev mode with hot reload: edit a file on the host and the container picks it up.
+## Where everything is
 
-### Tests
+| I need | Read |
+|---|---|
+| How we work, and the rules | [`AGENTS.md`](AGENTS.md) |
+| Which file does what | [`docs/map/`](docs/map/README.md) |
+| How the system fits together | [`docs/architecture.md`](docs/architecture.md) |
+| Naming, structure, style | [`docs/conventions.md`](docs/conventions.md) |
+| Running and writing tests, CI | [`docs/testing.md`](docs/testing.md) |
+| The AI layer: RAG, prompts, cost | [`docs/llm/`](docs/llm/README.md) |
+| Branches, commits, pull requests | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| What changed recently and why | [`docs/log.md`](docs/log.md) |
 
-```bash
-docker compose exec backend pytest                  # backend, coverage gated at 90%
-docker compose exec frontend npm test               # frontend unit tests
-docker compose exec frontend npm run typecheck      # TypeScript
-python scripts/smoke_test.py                        # the whole stack, over HTTP
-```
-
-Full picture in [`docs/testing.md`](docs/testing.md). All of it runs in CI on every pull request.
-
-### Everyday commands
-
-```bash
-docker compose up -d              # start in the background
-docker compose logs -f backend    # follow one service's logs
-docker compose restart backend    # restart after a dependency change
-docker compose down               # stop (data survives)
-docker compose down -v            # stop and wipe the database volume
-docker compose exec db psql -U bilingers -d bilingers   # psql shell
-```
-
-`db/init/*.sql` runs **only** on an empty volume. After changing it, use `docker compose down -v` to see the effect.
-
----
-
-## Repository layout
-
-```
-backend/            FastAPI service
-  app/
-    config.py       settings from environment variables
-    db.py           SQLAlchemy engine + session dependency
-    main.py         app entrypoint, CORS, router wiring
-    routers/        one file per HTTP domain
-frontend/           Next.js app (App Router)
-  app/              pages, layout, global styles
-db/init/            SQL executed on first database start
-docs/
-  map/              which file does what, split by area
-  llm/              design notes for the AI layer
-  architecture.md   modules, data flow, decisions
-  conventions.md    naming, structure, style
-  log.md            what changed and why (capped)
-scripts/            maintenance scripts, standard library only
-docker-compose.yml  the three services
-.env.example        every configurable variable
-```
-
-Where each file lives and what it does is tracked in [`docs/map/`](docs/map/README.md), enforced by `python scripts/check_map.py`.
-
----
-
-## What is deliberately missing
-
-Not oversights - decisions for this stage. Don't add them without agreeing first:
-
-- vector database, embeddings, RAG retrieval,
-- LLM SDK, model API calls, API keys,
-- authentication, quiz, certificates, admin panel,
-- database migrations (only the bootstrap SQL exists),
-- production Docker images (the current ones are dev-mode and ship test tooling).
-
-The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/README.md) - notes, not code.
-
----
-
-## Documentation
-
-- [`AGENTS.md`](AGENTS.md) - how we work, and where to look for everything else. **Read first.**
-- [`docs/map/`](docs/map/README.md) - which file does what, split by area. The fast way to find code.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) - branches, commits, review.
-- [`docs/architecture.md`](docs/architecture.md) - modules, data flow, decisions.
-- [`docs/conventions.md`](docs/conventions.md) - naming, structure, style.
-- [`docs/testing.md`](docs/testing.md) - how to run tests, what each layer covers, CI.
-- [`docs/llm/`](docs/llm/README.md) - knowledge base, retrieval, prompts, cost control.
-- [`docs/log.md`](docs/log.md) - what changed recently and why.
-
-`CLAUDE.md` and `.cursor/rules/` both point at `AGENTS.md`, so Claude Code and Cursor work from the same rules. Change `AGENTS.md`; never copy rules into the tool-specific files.
+`CLAUDE.md` and `.cursor/rules/` both point at `AGENTS.md`, so every agent tool works from one set of rules.
 
 ---
 
