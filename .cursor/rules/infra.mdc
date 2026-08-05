@@ -4,7 +4,7 @@ globs: docker-compose.yml,db/**,scripts/**,**/Dockerfile,.env.example
 alwaysApply: false
 ---
 
-Map of this area: `docs/map/infra.md` — it also lists the gotchas below in full.
+Map of this area: `docs/map/infra.md` - it also lists the gotchas below in full.
 
 ## The three services
 
@@ -13,8 +13,8 @@ Map of this area: `docs/map/infra.md` — it also lists the gotchas below in ful
 ## Things that bite
 
 - `db/init/*.sql` runs **only** on an empty volume. After editing: `docker compose down -v`, then `up`.
-- `DATABASE_URL` host is `db` — the compose service name, resolvable only inside the compose network.
-- `NEXT_PUBLIC_API_URL` is used by the browser — it must be host-reachable (`localhost:8000`).
+- `DATABASE_URL` host is `db` - the compose service name, resolvable only inside the compose network.
+- `NEXT_PUBLIC_API_URL` is used by the browser - it must be host-reachable (`localhost:8000`).
 - `frontend` keeps the image's `node_modules` and `.next` as anonymous volumes. `package.json` changes need `--build`.
 
 ## Rules

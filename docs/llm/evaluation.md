@@ -1,6 +1,6 @@
 # Evaluation
 
-> Status: **not implemented.** Worth designing early — retrieval and prompt changes are impossible to judge by feel.
+> Status: **not implemented.** Worth designing early - retrieval and prompt changes are impossible to judge by feel.
 
 ## What we need to know
 
@@ -22,7 +22,7 @@ Build this set from real questions as they arrive, including the ones from [`una
 
 ## Open questions
 
-- Who judges correctness — the foundation's experts, presumably, but at what cadence?
+- Who judges correctness - the foundation's experts, presumably, but at what cadence?
 - Is there a feedback control in the UI ("this answer didn't help"), and does that collect anything personal?
 - How do we notice regressions after a knowledge base update, not just after a code change?
 

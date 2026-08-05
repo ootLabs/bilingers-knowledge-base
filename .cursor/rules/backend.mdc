@@ -4,17 +4,17 @@ globs: backend/**
 alwaysApply: false
 ---
 
-Map of this area: `docs/map/backend.md` — read it before searching for a file.
+Map of this area: `docs/map/backend.md` - read it before searching for a file.
 
 ## Layering
 
 `router → service → model`. Never the reverse, and a router never touches the database directly beyond a health probe.
 
-- `app/main.py` — assembly only: middleware, router includes. No business logic.
-- `app/routers/<domain>.py` — HTTP concerns: request/response, status codes.
-- `app/services/<domain>.py` — business logic. Create the folder with the first file.
-- `app/schemas/<domain>.py` — Pydantic request/response models.
-- `app/models/<domain>.py` — SQLAlchemy models.
+- `app/main.py` - assembly only: middleware, router includes. No business logic.
+- `app/routers/<domain>.py` - HTTP concerns: request/response, status codes.
+- `app/services/<domain>.py` - business logic. Create the folder with the first file.
+- `app/schemas/<domain>.py` - Pydantic request/response models.
+- `app/models/<domain>.py` - SQLAlchemy models.
 
 ## Rules
 

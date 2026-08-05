@@ -8,11 +8,11 @@ The substantive material on raising bilingual children, authored and maintained 
 
 ## Open questions
 
-- **Format we receive it in** — documents, a CMS export, structured articles? This drives the whole ingestion design.
-- **Ownership and update cadence** — who publishes a change, and how often?
-- **Review before publishing** — does new content need approval before users see it, and who approves it?
-- **Versioning** — do we need to know which version of the base produced a given answer? (Useful when a wrong answer is reported.)
-- **Granularity** — is the natural unit an article, a section, or a Q&A pair? Affects retrieval quality more than any other choice.
+- **Format we receive it in** - documents, a CMS export, structured articles? This drives the whole ingestion design.
+- **Ownership and update cadence** - who publishes a change, and how often?
+- **Review before publishing** - does new content need approval before users see it, and who approves it?
+- **Versioning** - do we need to know which version of the base produced a given answer? (Useful when a wrong answer is reported.)
+- **Granularity** - is the natural unit an article, a section, or a Q&A pair? Affects retrieval quality more than any other choice.
 
 ## Shape to aim for
 
@@ -25,12 +25,12 @@ Whatever the source format, the ingested unit should carry enough metadata to be
 - version or last-updated timestamp,
 - topic/tags, if the foundation already organizes content that way.
 
-Admin editing of the base is a planned feature (`Panel administracyjny`), so the storage format must be editable by a non-technical person — not a pile of files only a developer can change.
+Admin editing of the base is a planned feature (`Panel administracyjny`), so the storage format must be editable by a non-technical person - not a pile of files only a developer can change.
 
 ## Deliberately deferred
 
-- Chunking strategy — belongs with retrieval, see [`retrieval.md`](retrieval.md).
-- Embeddings and any vector storage — not until retrieval is actually being built.
+- Chunking strategy - belongs with retrieval, see [`retrieval.md`](retrieval.md).
+- Embeddings and any vector storage - not until retrieval is actually being built.
 
 ## When this gets built
 

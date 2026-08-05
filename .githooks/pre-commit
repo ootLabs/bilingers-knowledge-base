@@ -1,23 +1,31 @@
 #!/bin/sh
-# Blocks a commit while docs/map/ disagrees with the repository.
+# Blocks a commit that would leave the repository inconsistent.
 #
 # Enable once per clone:  git config core.hooksPath .githooks
 #
-# The map is only useful if it is true. Catching drift here means it is never
-# committed, instead of being discovered by whoever it misleads next.
+# Two checks:
+#   check_map.py   docs/map/ must match the files on disk
+#   check_text.py  no em dashes or en dashes anywhere
+#
+# Both catch things that are cheap to fix now and annoying to fix later.
 
 if command -v python >/dev/null 2>&1; then
     PY=python
 elif command -v python3 >/dev/null 2>&1; then
     PY=python3
 else
-    echo "pre-commit: python not found, skipping the map check." >&2
+    echo "pre-commit: python not found, skipping checks." >&2
     exit 0
 fi
 
-if ! "$PY" scripts/check_map.py; then
+FAILED=0
+
+"$PY" scripts/check_map.py || FAILED=1
+"$PY" scripts/check_text.py || FAILED=1
+
+if [ "$FAILED" -ne 0 ]; then
     echo >&2
-    echo "Commit blocked: docs/map/ is out of date. Fix the rows above, then commit again." >&2
+    echo "Commit blocked. Fix the problems above, then commit again." >&2
     echo "Deliberate exception: git commit --no-verify" >&2
     exit 1
 fi

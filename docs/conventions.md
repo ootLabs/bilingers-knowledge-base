@@ -1,4 +1,4 @@
-# Conventions — Bilingers
+# Conventions - Bilingers
 
 > Decide once, follow always. Consistency beats personal preference. Written in English.
 
@@ -19,7 +19,7 @@
 
 ## Folder structure
 
-**Backend — layered, one file per domain.**
+**Backend - layered, one file per domain.**
 
 ```
 backend/app/
@@ -34,7 +34,7 @@ backend/app/
 
 A router calls a service; a service uses models. Never the other way round, and never a router touching the database directly beyond a health probe.
 
-**Frontend — Next.js App Router, feature-first.**
+**Frontend - Next.js App Router, feature-first.**
 
 ```
 frontend/app/
@@ -58,9 +58,10 @@ Don't create empty folders ahead of need. Create them with the first file that b
 
 ## Code style
 
-- **Python:** PEP 8, type hints on public functions, 4-space indent. No formatter is wired in yet — if you add one, use `ruff` and commit the config.
+- **Python:** PEP 8, type hints on public functions, 4-space indent. No formatter is wired in yet - if you add one, use `ruff` and commit the config.
 - **TypeScript:** `strict` is on and stays on. No `any` without a comment explaining why.
 - **Comments** explain *why*, never *what*. No references to AI or tooling anywhere.
+- **Punctuation:** no em dashes, no en dashes, anywhere in the repo. Use a comma, a colon, parentheses, or a plain hyphen. `scripts/check_text.py` enforces it.
 - **File size:** past ~300 lines, or doing two things → split it.
 
 ## Tests
@@ -75,4 +76,4 @@ Update this section in the same commit that introduces the test setup.
 
 ## User-facing text
 
-All copy shown to users is **Polish** and lives in the frontend, never hardcoded in the backend — the backend returns data and keys, not sentences. The architecture must stay ready for more languages; see `docs/llm/i18n.md`.
+All copy shown to users is **Polish** and lives in the frontend, never hardcoded in the backend - the backend returns data and keys, not sentences. The architecture must stay ready for more languages; see `docs/llm/i18n.md`.

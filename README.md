@@ -1,8 +1,8 @@
-# Bilingers — intelligent knowledge base on bilingualism
+# Bilingers - intelligent knowledge base on bilingualism
 
 A free educational app for parents and carers, built with the Bilingual Future Foundation. Users talk to an AI assistant grounded in the foundation's knowledge base, then check what they learned with a quiz that can end in a certificate.
 
-**Status: skeleton.** Three containers that build, start, and talk to each other — nothing more. No vector database, no LLM SDK, no model calls, no API keys. See "What is deliberately missing" below.
+**Status: skeleton.** Three containers that build, start, and talk to each other - nothing more. No vector database, no LLM SDK, no model calls, no API keys. See "What is deliberately missing" below.
 
 ---
 
@@ -18,7 +18,7 @@ A free educational app for parents and carers, built with the Bilingual Future F
 
 ## Requirements
 
-- Docker Desktop (or Docker Engine) with Compose v2 — `docker compose version` must work.
+- Docker Desktop (or Docker Engine) with Compose v2 - `docker compose version` must work.
 - Nothing else. Node and Python run inside the containers.
 
 ---
@@ -33,11 +33,11 @@ docker compose up --build
 
 First build takes a few minutes (npm install + pip install). Then:
 
-- Frontend — <http://localhost:3000>
-- Backend — <http://localhost:8000>
-- API docs (Swagger) — <http://localhost:8000/docs>
-- Health — <http://localhost:8000/health>
-- Health incl. database — <http://localhost:8000/health/db>
+- Frontend - <http://localhost:3000>
+- Backend - <http://localhost:8000>
+- API docs (Swagger) - <http://localhost:8000/docs>
+- Health - <http://localhost:8000/health>
+- Health incl. database - <http://localhost:8000/health/db>
 
 Both services run in dev mode with hot reload: edit a file on the host and the container picks it up.
 
@@ -85,7 +85,7 @@ Where each file lives and what it does is tracked in [`docs/map/`](docs/map/READ
 
 ## What is deliberately missing
 
-Not oversights — decisions for this stage. Don't add them without agreeing first:
+Not oversights - decisions for this stage. Don't add them without agreeing first:
 
 - vector database, embeddings, RAG retrieval,
 - LLM SDK, model API calls, API keys,
@@ -93,19 +93,19 @@ Not oversights — decisions for this stage. Don't add them without agreeing fir
 - database migrations (only the bootstrap SQL exists),
 - CI, tests, production Docker images.
 
-The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/README.md) — notes, not code.
+The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/README.md) - notes, not code.
 
 ---
 
 ## Documentation
 
-- [`AGENTS.md`](AGENTS.md) — how we work, and where to look for everything else. **Read first.**
-- [`docs/map/`](docs/map/README.md) — which file does what, split by area. The fast way to find code.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — branches, commits, review.
-- [`docs/architecture.md`](docs/architecture.md) — modules, data flow, decisions.
-- [`docs/conventions.md`](docs/conventions.md) — naming, structure, style.
-- [`docs/llm/`](docs/llm/README.md) — knowledge base, retrieval, prompts, cost control.
-- [`docs/log.md`](docs/log.md) — what changed recently and why.
+- [`AGENTS.md`](AGENTS.md) - how we work, and where to look for everything else. **Read first.**
+- [`docs/map/`](docs/map/README.md) - which file does what, split by area. The fast way to find code.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) - branches, commits, review.
+- [`docs/architecture.md`](docs/architecture.md) - modules, data flow, decisions.
+- [`docs/conventions.md`](docs/conventions.md) - naming, structure, style.
+- [`docs/llm/`](docs/llm/README.md) - knowledge base, retrieval, prompts, cost control.
+- [`docs/log.md`](docs/log.md) - what changed recently and why.
 
 `CLAUDE.md` and `.cursor/rules/` both point at `AGENTS.md`, so Claude Code and Cursor work from the same rules. Change `AGENTS.md`; never copy rules into the tool-specific files.
 

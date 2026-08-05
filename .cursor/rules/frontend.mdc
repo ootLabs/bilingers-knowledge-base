@@ -4,15 +4,15 @@ globs: frontend/**
 alwaysApply: false
 ---
 
-Map of this area: `docs/map/frontend.md` — read it before searching for a file.
+Map of this area: `docs/map/frontend.md` - read it before searching for a file.
 
 ## Structure
 
 Next.js 15, App Router, TypeScript, feature-first.
 
-- `app/<feature>/page.tsx` — one folder per route.
-- `components/<Name>.tsx` — shared components, created only once something is reused twice.
-- `lib/api-client.ts` — one API client. Not `fetch` scattered across components.
+- `app/<feature>/page.tsx` - one folder per route.
+- `components/<Name>.tsx` - shared components, created only once something is reused twice.
+- `lib/api-client.ts` - one API client. Not `fetch` scattered across components.
 
 Don't create empty folders ahead of need.
 
@@ -21,7 +21,7 @@ Don't create empty folders ahead of need.
 - **All user-facing text is Polish.** Identifiers, comments, and file names are English. Never mix the two inside one artifact.
 - `strict: true` stays on. No `any` without a comment explaining why.
 - Server Components by default; add `"use client"` only when the component actually needs interactivity or browser APIs.
-- API base URL comes from `NEXT_PUBLIC_API_URL`. It is read by the browser, so it must be host-reachable — never the Docker service name.
+- API base URL comes from `NEXT_PUBLIC_API_URL`. It is read by the browser, so it must be host-reachable - never the Docker service name.
 - `PascalCase` for components (file and symbol), `camelCase` for functions and variables, `kebab-case` for non-component files.
 - No component library, state manager, or styling framework is installed. Adding one is a recorded decision in `docs/architecture.md`, not a drive-by `npm install`.
 - Past ~300 lines or doing two things → split the file, and update the map row.
