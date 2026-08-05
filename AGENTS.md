@@ -56,7 +56,17 @@ Load only the area you're touching. Reading all four maps to change one CSS vari
 
 ## Git
 
-- `main` is always working. Branch: `feat/` `fix/` `refactor/` `chore/` `docs/` + short kebab-case.
+**Two long-lived branches.** Never commit directly to either.
+
+- **`main` is production.** Always deployable. Only a release merge from `dev`, or a `hotfix/`, ever lands here.
+- **`dev` is where work integrates.** The default branch. Cut your branch from it, merge back into it.
+
+**Short-lived branches, cut from `dev`:** `feat/` `fix/` `refactor/` `chore/` `docs/` + short kebab-case.
+
+**`hotfix/<short>` is the one exception:** cut from `main`, merged to `main`, then merged back into `dev` so the next release does not silently revert it.
+
+**Release:** pull request from `dev` to `main`, merged with `--no-ff` so it stays one identifiable commit.
+
 - Commit = one logical change. Title `type: short summary`, ≤ ~60 chars, English, imperative, no trailing period.
 - No body unless the change is large or non-obvious - then 2-4 bullets.
 - **No AI or tool authorship anywhere** - not in commits, PRs, code, comments, or docs. No `Co-Authored-By`, no "generated with".

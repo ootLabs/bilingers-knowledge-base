@@ -56,7 +56,14 @@ Tests: [`docs/testing.md`](docs/testing.md). All of them run in CI on every pull
 
 ## Branches
 
-Never commit non-trivial work straight to `main`. `main` must always be in a working state.
+Two branches live forever. Nothing is committed directly to either of them.
+
+| Branch | Role | What lands here |
+|---|---|---|
+| `main` | Production. Always deployable. | A release merge from `dev`, or a `hotfix/`. Nothing else. |
+| `dev` | Integration. The default branch. | Every finished feature branch. |
+
+Everything else is short-lived and **cut from `dev`**:
 
 ```
 feat/<short>       new functionality
@@ -67,6 +74,32 @@ docs/<short>       documentation only
 ```
 
 Short, lowercase, hyphenated: `feat/chat-endpoint`, `fix/cors-origins`.
+
+### Daily flow
+
+```bash
+git checkout dev && git pull
+git checkout -b feat/chat-endpoint
+# work, commit, push
+git push -u origin feat/chat-endpoint
+# open a pull request into dev
+```
+
+### Releasing
+
+Open a pull request from `dev` into `main` and merge it with `--no-ff`. One commit on `main` per release, so `git log main` reads as a release history rather than a stream of individual changes.
+
+### Hotfixes
+
+A production bug that cannot wait for the next release:
+
+```bash
+git checkout main && git pull
+git checkout -b hotfix/broken-health-probe
+# fix, commit, PR into main
+```
+
+After it merges to `main`, **merge `main` back into `dev` immediately.** Skip that and the next release quietly reverts the fix. This is the single most common way a two-branch model breaks.
 
 ---
 
@@ -102,7 +135,13 @@ A pull request describes **what changed and why**, in a few sentences. Link the 
 
 CI runs on every pull request: repository checks, backend tests against real PostgreSQL, frontend typecheck plus tests plus build, and a smoke test that starts all three containers and talks to them over HTTP. A red pipeline means the branch does not merge.
 
-**Repository setting, not a file:** make those four jobs required in branch protection on `main`. Without it CI is only advice, and eventually someone merges past it.
+**Repository settings, not files.** Nobody can commit these, so they need doing once in GitHub:
+
+- Default branch: `dev`, so pull requests target it by default instead of production.
+- Branch protection on **both** `main` and `dev`: require the four CI jobs to pass, require a pull request, block direct pushes.
+- `main` additionally: no force pushes, no deletion.
+
+Without protection, CI is only advice and eventually someone merges past a red run.
 
 ---
 

@@ -34,7 +34,9 @@ Repository is **English** (code, comments, commits, docs) regardless of chat lan
 
 ## Git
 
-Branch `feat/|fix/|refactor/|chore/|docs/` + kebab-case. Commit title `type: short summary`, ≤ ~60 chars, English, imperative. One logical change per commit.
+`main` is production, `dev` is integration. Never commit directly to either. Cut `feat/|fix/|refactor/|chore/|docs/` + kebab-case **from `dev`** and merge back into `dev`. Only `hotfix/` branches from `main`, and after merging there it must be merged back into `dev`.
+
+Commit title `type: short summary`, ≤ ~60 chars, English, imperative. One logical change per commit.
 
 **Never credit an AI or tool** in commits, PRs, code, comments, or docs.
 
