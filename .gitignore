@@ -8,6 +8,7 @@ node_modules/
 .next/
 out/
 next-env.d.ts
+*.tsbuildinfo
 npm-debug.log*
 yarn-error.log*
 
