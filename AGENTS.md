@@ -12,9 +12,9 @@ Free educational app giving parents reliable knowledge about raising a bilingual
 
 The repository is a **skeleton**. Deliberately absent, not to be added without an explicit request:
 
-no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel · no migrations · no CI · no tests
+no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel · no migrations
 
-What exists: three containers that build and talk to each other, health endpoints, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
+What exists: three containers that build and talk to each other, health endpoints, a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
 
 ---
 
@@ -30,6 +30,7 @@ Blind grep is how a five-minute change turns into an hour. Start here every time
 | Docker, database, scripts, env vars | `docs/map/infra.md` |
 | Understanding how the system fits together | `docs/architecture.md` |
 | Naming, folder structure, patterns, style | `docs/conventions.md` |
+| Writing or running tests, CI, coverage | `docs/testing.md` |
 | Anything AI: RAG, prompts, cost, quiz, i18n | `docs/llm/README.md` |
 | What changed recently and why | `docs/log.md` - **top few entries only** |
 
@@ -69,6 +70,9 @@ Full workflow: `CONTRIBUTING.md`.
 A change is finished when **all** of these hold:
 
 1. The code works - you ran it, you didn't just read the diff.
+   - `docker compose exec backend pytest` and `docker compose exec frontend npm test` pass.
+   - New behavior has a test. A bug fix has a test that fails without the fix.
+   - Touched how the stack starts? `python scripts/smoke_test.py` passes too.
 2. `python scripts/check_map.py` and `python scripts/check_text.py` both exit 0 - the pre-commit hook blocks the commit otherwise. Added, moved, renamed, or deleted a file → its map row changed in the same commit.
 3. Behavior or structure changed → the matching `docs/` file is updated. Built part of the AI layer → the matching `docs/llm/` note now describes what exists, not what was planned.
 4. New environment variable → it is in `.env.example`.

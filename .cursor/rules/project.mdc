@@ -15,13 +15,14 @@ Blind search is how a five-minute change becomes an hour. Start with the map for
 - `docs/map/infra.md` - Docker, database, scripts, env vars
 - `docs/architecture.md` - how the system fits together
 - `docs/conventions.md` - naming, structure, patterns
+- `docs/testing.md` - how to run tests, what each layer covers, CI
 - `docs/llm/README.md` - anything AI: RAG, prompts, cost, quiz, i18n
 
 Map first, search second. If the map didn't have it, the map was wrong - fix it as part of your change.
 
 ## Stage
 
-Skeleton. No vector DB, no LLM SDK, no model API calls, no auth, no quiz, no migrations, no tests - deliberately. Don't add them without an explicit request.
+Skeleton. No vector DB, no LLM SDK, no model API calls, no auth, no quiz, no migrations - deliberately. Don't add them without an explicit request. Tests and CI do exist and must stay green.
 
 ## Languages
 
@@ -39,7 +40,7 @@ Branch `feat/|fix/|refactor/|chore/|docs/` + kebab-case. Commit title `type: sho
 
 ## Definition of done
 
-1. It runs - verified, not just read.
+1. It runs - verified, not just read. `docker compose exec backend pytest` and `docker compose exec frontend npm test` pass, and new behavior has a test.
 2. `python scripts/check_map.py` and `python scripts/check_text.py` exit 0 - file added/moved/deleted means its `docs/map/` row changed in the same commit.
 3. Behavior or structure changed → matching `docs/` file updated.
 4. New env var → in `.env.example`.

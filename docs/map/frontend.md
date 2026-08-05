@@ -9,7 +9,18 @@ Next.js 15, App Router, TypeScript. All user-facing copy is **Polish**; identifi
 | `frontend/app/globals.css` | CSS variables (light/dark via `prefers-color-scheme`), base body styles |
 | `frontend/next.config.mjs` | Next.js config - `reactStrictMode` only |
 | `frontend/tsconfig.json` | TypeScript config, `strict: true`, `@/*` path alias |
-| `frontend/package.json` | Dependencies and `dev`/`build`/`start`/`lint` scripts |
+| `frontend/package.json` | Dependencies and the `dev`/`build`/`start`/`lint`/`typecheck`/`test` scripts |
+| `frontend/vitest.config.ts` | Vitest setup: jsdom, coverage provider and thresholds, which files are tested |
+| `frontend/vitest.setup.ts` | Loads jest-dom matchers, clears the DOM between tests |
+
+## Tests
+
+`docker compose exec frontend npm test`. See [`../testing.md`](../testing.md) for the full picture.
+
+| Path | What's in it |
+|---|---|
+| `frontend/app/page.test.tsx` | Landing page rendering, Polish copy, and both branches of the API URL fallback |
+| `frontend/app/layout.test.tsx` | Document language, children passthrough, exported `metadata` |
 
 ## Where new things go
 

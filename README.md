@@ -41,6 +41,17 @@ First build takes a few minutes (npm install + pip install). Then:
 
 Both services run in dev mode with hot reload: edit a file on the host and the container picks it up.
 
+### Tests
+
+```bash
+docker compose exec backend pytest                  # backend, coverage gated at 90%
+docker compose exec frontend npm test               # frontend unit tests
+docker compose exec frontend npm run typecheck      # TypeScript
+python scripts/smoke_test.py                        # the whole stack, over HTTP
+```
+
+Full picture in [`docs/testing.md`](docs/testing.md). All of it runs in CI on every pull request.
+
 ### Everyday commands
 
 ```bash
@@ -91,7 +102,7 @@ Not oversights - decisions for this stage. Don't add them without agreeing first
 - LLM SDK, model API calls, API keys,
 - authentication, quiz, certificates, admin panel,
 - database migrations (only the bootstrap SQL exists),
-- CI, tests, production Docker images.
+- production Docker images (the current ones are dev-mode and ship test tooling).
 
 The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/README.md) - notes, not code.
 
@@ -104,6 +115,7 @@ The intended design of the AI layer is written up in [`docs/llm/`](docs/llm/READ
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) - branches, commits, review.
 - [`docs/architecture.md`](docs/architecture.md) - modules, data flow, decisions.
 - [`docs/conventions.md`](docs/conventions.md) - naming, structure, style.
+- [`docs/testing.md`](docs/testing.md) - how to run tests, what each layer covers, CI.
 - [`docs/llm/`](docs/llm/README.md) - knowledge base, retrieval, prompts, cost control.
 - [`docs/log.md`](docs/log.md) - what changed recently and why.
 

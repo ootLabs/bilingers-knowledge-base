@@ -45,7 +45,17 @@ SCANNED_SUFFIXES = {
 # Text files worth scanning that carry no suffix.
 EXTRA_FILES = {"Dockerfile", "pre-commit", ".env.example", ".gitignore", ".cursorignore"}
 
-EXCLUDED_DIRS = {"node_modules", ".next", "__pycache__", ".venv", "venv", ".git", "out"}
+EXCLUDED_DIRS = {
+    "node_modules",
+    ".next",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".git",
+    "out",
+    "coverage",
+    "htmlcov",
+}
 EXCLUDED_NAMES = {"package-lock.json", "next-env.d.ts"}
 
 

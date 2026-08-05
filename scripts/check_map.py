@@ -35,13 +35,15 @@ AREAS: list[tuple[str, list[str]]] = [
             "db/init/*.sql",
             "scripts/*.py",
             ".githooks/*",
+            ".github/workflows/*.yml",
         ],
     ),
     (
         "backend",
         [
             "backend/**/*.py",
-            "backend/requirements.txt",
+            "backend/requirements*.txt",
+            "backend/pytest.ini",
         ],
     ),
     (
@@ -58,7 +60,17 @@ AREAS: list[tuple[str, list[str]]] = [
 ]
 
 # Directory names that never contain files worth mapping.
-EXCLUDED_DIRS = {"node_modules", ".next", "__pycache__", ".venv", "venv", ".git", "out"}
+EXCLUDED_DIRS = {
+    "node_modules",
+    ".next",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".git",
+    "out",
+    "coverage",
+    "htmlcov",
+}
 
 # Generated or lock files: real, but nothing an agent needs a description of.
 EXCLUDED_NAMES = {"next-env.d.ts", "package-lock.json"}

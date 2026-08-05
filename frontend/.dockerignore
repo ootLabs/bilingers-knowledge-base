@@ -1,6 +1,7 @@
 node_modules/
 .next/
 out/
+coverage/
 .env
 .env.*
 npm-debug.log*

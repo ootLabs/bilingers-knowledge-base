@@ -11,7 +11,9 @@ Docker Compose runs everything. There is no supported way to run this project ou
 | `db/init/01_schema.sql` | Bootstrap SQL - creates `health_probe`; runs **only** on an empty volume |
 | `scripts/check_map.py` | Drift check between the repo and `docs/map/*.md`; exit 1 on drift. `AREAS` + `KNOWN_TOP_LEVEL` define what it scans |
 | `scripts/check_text.py` | Bans em dashes and en dashes across the repo; `BANNED` holds the characters as escapes so the file does not trip itself |
+| `scripts/smoke_test.py` | End-to-end check against the running stack over HTTP; used locally and by CI |
 | `.githooks/pre-commit` | Runs both checks and blocks the commit on failure; needs `git config core.hooksPath .githooks` once per clone |
+| `.github/workflows/ci.yml` | CI: repo checks, backend pytest against real PostgreSQL, frontend typecheck/tests/build, stack smoke test |
 
 ## Things that bite
 

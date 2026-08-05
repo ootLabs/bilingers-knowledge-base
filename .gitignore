@@ -11,6 +11,12 @@ next-env.d.ts
 npm-debug.log*
 yarn-error.log*
 
+# Test output
+coverage/
+.coverage
+htmlcov/
+lcov.info
+
 # Python
 __pycache__/
 *.py[cod]

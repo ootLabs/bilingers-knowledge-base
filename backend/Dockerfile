@@ -5,8 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# The image is dev-only for now, so test tooling ships with it and
+# `docker compose exec backend pytest` works without extra setup.
+# A production image will install requirements.txt alone.
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 COPY . .
 

@@ -66,13 +66,12 @@ Don't create empty folders ahead of need. Create them with the first file that b
 
 ## Tests
 
-None yet. When the first one is written:
+Full detail in [`testing.md`](testing.md). The conventions:
 
-- **What we test:** business logic and critical paths (retrieval correctness, quota enforcement, quiz scoring). Not framework glue.
-- **Backend:** `pytest`, tests in `backend/tests/`, mirroring the `app/` layout, files named `test_<module>.py`. Run with `docker compose exec backend pytest`.
-- **Frontend:** only once there is logic worth testing; UI snapshots are not it.
-
-Update this section in the same commit that introduces the test setup.
+- **Backend:** `pytest`, tests in `backend/tests/`, files named `test_<module>.py`. Run with `docker compose exec backend pytest`. Coverage gate is 90%.
+- **Frontend:** Vitest plus Testing Library, test file next to its component as `<Name>.test.tsx`. Run with `docker compose exec frontend npm test`.
+- **What we test:** behavior and critical paths, not framework glue and not implementation details. A bug fix carries a test that fails without the fix.
+- **Anything needing a real database** is marked `@pytest.mark.integration` and skips when PostgreSQL is unreachable, so the suite still runs on a laptop with nothing started.
 
 ## User-facing text
 

@@ -19,6 +19,11 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-08-05 - test suite, coverage gates, and CI
+**Done:** 23 backend tests (unit, API, 2 integration) at 100% coverage with a 90% gate; 8 frontend tests via Vitest plus a typecheck; `scripts/smoke_test.py` drives the running stack over HTTP; `.github/workflows/ci.yml` runs all of it on every PR; `docs/testing.md` explains the layers; `frontend/package-lock.json` finally exists so Docker and CI both use `npm ci`.
+**Decisions:** Integration tests skip rather than fail without a database, so the suite is usable with nothing running, while CI always provides real PostgreSQL. Frontend branch-coverage threshold is set lower than the rest because v8 counts unreachable branches in transpiled JSX, and faking tests to hit a number hides more than it reveals.
+**Watch out:** GitHub service containers do not run `db/init/`, so CI applies it with psql; a new bootstrap file needs no change, but a move away from `db/init/` does. Branch protection making the four jobs required is a repo setting nobody can commit, and without it CI is only advice.
+
 ## 2026-08-05 - em dashes banned repo-wide
 **Done:** 160 em/en dashes removed from 25 files; `scripts/check_text.py` bans them and the pre-commit hook now runs it alongside the map check.
 **Decisions:** Enforce rather than document, same reasoning as the map: a style rule nobody checks is a style rule agents forget by the third session. The ban covers Polish UI copy too, despite Polish typography normally using an en dash.

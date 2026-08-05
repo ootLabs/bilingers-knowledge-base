@@ -1,6 +1,8 @@
 node_modules/
 .next/
 out/
+coverage/
+htmlcov/
 __pycache__/
 .venv/
 venv/

@@ -66,13 +66,17 @@ Nothing in this repository may credit or mention an AI assistant or a code-gener
 
 ## Before you open a pull request
 
-1. The change works - you started the stack and exercised it, not just read the diff.
+1. The change works - you started the stack and exercised it, not just read the diff. `docker compose exec backend pytest` and `docker compose exec frontend npm test` pass, and new behavior has a test. See [`docs/testing.md`](docs/testing.md).
 2. `python scripts/check_map.py` exits 0 - the pre-commit hook enforces this. Added, moved, renamed, or deleted a file → its row in `docs/map/` changed in the same commit. Added a whole new top-level directory → teach `AREAS` and `KNOWN_TOP_LEVEL` in the script about it and give it its own `docs/map/` file.
 3. Affected files under `docs/` are updated. Stale docs are worse than none.
 4. `.env.example` lists any new environment variable (with a safe placeholder, never a real secret).
 5. Larger task → one entry at the top of `docs/log.md`, following the format defined there.
 
-A pull request describes **what changed and why**, in a few sentences. Link the issue if there is one.
+A pull request describes **what changed and why**, in a few sentences. Link the issue if there is one. The template in `.github/pull_request_template.md` carries the checklist.
+
+CI runs on every pull request: repository checks, backend tests against real PostgreSQL, frontend typecheck plus tests plus build, and a smoke test that starts all three containers and talks to them over HTTP. A red pipeline means the branch does not merge.
+
+**Repository setting, not a file:** make those four jobs required in branch protection on `main`. Without it CI is only advice, and eventually someone merges past it.
 
 ---
 
