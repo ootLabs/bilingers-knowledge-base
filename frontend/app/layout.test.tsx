@@ -12,12 +12,13 @@ describe("root layout", () => {
     expect(element.props.lang).toBe("pl");
   });
 
-  it("passes children through to the body", () => {
+  it("renders the site header before the page content in the body", () => {
     const child = "content";
     const element = RootLayout({ children: child }) as React.ReactElement<{
-      children: React.ReactElement<{ children: unknown }>;
+      children: React.ReactElement<{ children: React.ReactNode[] }>;
     }>;
-    expect(element.props.children.props.children).toBe(child);
+    const bodyChildren = element.props.children.props.children;
+    expect(bodyChildren[1]).toBe(child);
   });
 
   it("sets metadata used for the browser tab and link previews", () => {

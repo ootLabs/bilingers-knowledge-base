@@ -19,6 +19,11 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-08-21 - frontend skeleton: routing, i18n layer, design tokens (T-14)
+**Done:** App Router routes for landing, chat, quiz, and account (quiz and account are intentionally placeholder); `frontend/lib/i18n/` adds a dependency-free dictionary translation layer, Polish only; design tokens as CSS variables in `globals.css`; mobile first layout with a `:focus-visible` outline; Poppins loaded via `next/font/google`; `SiteHeader` nav shared across routes.
+**Decisions:** Custom translation layer instead of a library, a second locale is one file in `lib/i18n/locales/` plus one line in `translations.ts`, and TypeScript rejects a partial translation because its type is derived from `locales/pl.ts`. Brand color, font, and button radius tokens are the Bilingers based palette proposed in T-03, marked provisional in a comment at the top of `globals.css`, not final.
+**Watch out:** Provisional tokens will change once T-03's two open client questions land (whose brand the chat is, and which of two conflicting visual variants, live sites vs. 2023/24 Yellow House assets, is current), do not treat current hex values as frozen. `next/font/google` needed a mock in `vitest.setup.ts`, it relies on Next's build pipeline, not Vite's. The `@/*` import alias needed a matching `resolve.alias` in `vitest.config.ts`, tsconfig alone only satisfies `tsc`, not Vitest.
+
 ## 2026-08-05 - branch model: main as production, dev as integration
 **Done:** `dev` created from `main`; branch rules rewritten in `AGENTS.md`, `CONTRIBUTING.md`, and the Cursor rules; CI now also triggers on pushes to `dev`. First real CI run on GitHub passed all four jobs in 63s.
 **Decisions:** Feature branches cut from `dev` and merge back there; `main` only takes release merges and hotfixes, with `--no-ff` so its log reads as releases rather than individual commits.

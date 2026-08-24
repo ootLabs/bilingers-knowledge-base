@@ -1,14 +1,64 @@
+/*
+ * Design tokens for T-14, sourced from the T-03 branding research
+ * (Notion: ootLabs / Bilingers / Research / Branding;
+ * Trello: https://trello.com/c/YMaYUCYy).
+ *
+ * PROVISIONAL, DO NOT TREAT AS FINAL: tokens marked "brand, provisional"
+ * below come from the Bilingers palette specifically, because T-03 frames
+ * the chat as the vestibule of the Bilingers app. T-03 left three questions
+ * open with the client that directly affect these values:
+ *   1. Whose brand the chat belongs to: the foundation, Bilingers, or both.
+ *   2. Where the chat lives (unrelated to color, noted for completeness).
+ *   3. Both the foundation and Bilingers have two conflicting visual
+ *      variants: the current live sites vs. newer 2023/24 assets found on
+ *      the Yellow House server, with different colors.
+ * If the answer moves the brand toward the foundation or Yellow House
+ * Education instead of Bilingers, every token in the "brand, provisional"
+ * block below needs to be recalculated from #00b4cd / #ffda00 / Lato, not
+ * just swapped in place (see T-03 for the full palettes of all three
+ * researched brands).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --muted: #666666;
+  /* Brand, provisional: see the comment above before changing call sites. */
+  --color-primary: #2bade8;
+  --color-secondary: #732c84;
+  --color-accent: #fc8d0e;
+  --color-text: #262626;
+  --color-bg-muted: #f0f1f1;
+  --font-family-base: var(--font-poppins), "Poppins", sans-serif;
+  --radius-button: 1.2rem;
+
+  /* Shared across all three researched brands (fundacja, Bilingers, Yellow
+     House all use white section backgrounds), so this one is low risk
+     regardless of how the open questions above resolve. */
+  --color-bg: #ffffff;
+
+  /* Engineering defaults below: not sourced from T-03, not blocked by it.
+     T-03 explicitly did not derive a full spacing/radius scale or an error
+     color from the brand material, so these are ours to define. */
+  --color-text-muted: #666666;
+  --color-danger: #dc2626;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --breakpoint-sm: 40rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121212;
-    --foreground: #f2f2f2;
-    --muted: #9a9a9a;
+    --color-bg: #121212;
+    --color-bg-muted: #1e1e1e;
+    --color-text: #f2f2f2;
+    --color-text-muted: #9a9a9a;
+    /* Brand colors (primary/secondary/accent) are reused unchanged here.
+       Their contrast against this dark background has not been checked and
+       is not part of the T-03 research, revisit once the palette is final. */
   }
 }
 
@@ -16,11 +66,82 @@
   box-sizing: border-box;
 }
 
+html {
+  font-family: var(--font-family-base), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 body {
   margin: 0;
-  padding: 2rem;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
   line-height: 1.6;
+}
+
+/* Mobile first: base layout is the phone layout, wider rules only add. */
+main {
+  padding: var(--space-4);
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+@media (min-width: 40rem) {
+  main {
+    padding: var(--space-6);
+  }
+}
+
+a {
+  color: var(--color-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-bg-muted);
+}
+
+.site-header__brand {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-nav a {
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.site-nav a:hover {
+  text-decoration: underline;
+}
+
+.cta-button {
+  display: inline-block;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-primary);
+  color: #ffffff;
+  border-radius: var(--radius-button);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cta-button:hover {
+  opacity: 0.9;
 }

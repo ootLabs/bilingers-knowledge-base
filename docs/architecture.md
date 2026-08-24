@@ -8,7 +8,7 @@ A free educational app for parents and carers raising a bilingual child. The use
 
 Target flow (most of it not built yet): the user opens the app → reads a short intro → picks one of 3-5 suggested starter questions or types their own → the backend retrieves matching passages from the foundation's knowledge base → the model answers from those passages only → the app proposes 3-5 deeper follow-up questions → after some conversation the user can take a ~10-question quiz → passing issues a certificate.
 
-**What exists today:** three containers, health endpoints, and this documentation frame. Everything about retrieval, models, quiz, and certificates is design, not code - see `docs/llm/`.
+**What exists today:** three containers, health endpoints, this documentation frame, and (as of T-14) a frontend routing skeleton with a Polish-only translation layer and design tokens from T-03. The chat, quiz, and account routes exist but hold placeholder copy only. Everything about retrieval, models, quiz logic, and certificates is design, not code - see `docs/llm/`.
 
 ## Main modules
 
@@ -52,6 +52,8 @@ Planned addition, once the AI layer lands: the backend gains a retrieval step an
 | 2026-08-05 | Integration tests skip instead of failing when PostgreSQL is unreachable | Keeps the suite usable with nothing running, while CI always has a real database so nothing is quietly skipped there |
 | 2026-08-05 | Smoke test drives the real containers over HTTP | Unit tests pass on a machine where nothing starts; this is the check that answers "it works on my machine" |
 | 2026-08-05 | Two long-lived branches: `main` as production, `dev` as integration | Keeps `main` a readable release history and gives changes somewhere to accumulate and be tested together before they are called a release |
+| 2026-08-21 | Frontend translation layer is a custom dictionary lookup (`lib/i18n/`), not a library like `next-intl` | Only one locale ships today and no runtime locale switch exists yet; a library buys nothing the app uses. Adding a locale is one file plus one registry line in `translations.ts`, and TypeScript rejects a translation file whose keys do not match `locales/pl.ts` |
+| 2026-08-21 | Design tokens in `globals.css` use the Bilingers-based palette proposed in T-03, marked provisional in a comment at the top of the file | T-03 left open whether the chat's brand is the foundation, Bilingers, or both, and both the foundation and Bilingers have two conflicting visual variants in the source material. Bilingers was picked as the working default because T-03 frames the chat as that app's vestibule, not because the question is resolved |
 
 ## Integrations / external dependencies
 
