@@ -12,6 +12,34 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/requirements-dev.txt` | Test tooling on top of the runtime pins: pytest, pytest-cov, httpx |
 | `backend/pytest.ini` | Test config: `testpaths`, `pythonpath`, coverage gate at 90%, `integration` marker |
 
+## Models
+
+Every table lives here; nothing outside `models/` defines schema. Importing the package is what registers tables on the metadata, so a new module goes into `models/__init__.py` or migrations cannot see it.
+
+| Path | What's in it |
+|---|---|
+| `backend/app/models/__init__.py` | Imports every model so `Base.metadata` is complete; re-exports the public names |
+| `backend/app/models/base.py` | `Base`, `TimestampMixin`, the `PERSONAL_DATA` column marker, `personal_data_columns()` |
+| `backend/app/models/user.py` | `User` (`users`) - email unique in the database, `password_hash`, `email_verified_at` |
+| `backend/app/models/chat.py` | `ChatSession` (`chat_sessions`, nullable `user_id` for anonymous use), `Query` (`queries`, the token/cost ledger and the `queries_answer_requires_kb_version` check) |
+| `backend/app/models/knowledge.py` | `KnowledgeBaseVersion` (`knowledge_base_versions`), `KnowledgeGap` (`knowledge_gaps`), `KnowledgeGapStatus` |
+
+## Migrations
+
+Alembic owns every application table. `db/init/` is container bootstrap and never gains schema - see [`infra.md`](infra.md).
+
+```bash
+docker compose exec backend alembic upgrade head          # apply (the backend also does this on start)
+docker compose exec backend alembic revision -m "..."     # new revision, then hand-write the ops
+docker compose exec backend alembic current               # which revision is applied
+```
+
+| Path | What's in it |
+|---|---|
+| `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, logging. No `sqlalchemy.url` on purpose |
+| `backend/alembic/env.py` | Reads `DATABASE_URL` via `app.config`, sets `target_metadata` from `app.models.Base` |
+| `backend/alembic/versions/0001_core_data_model.py` | First revision: the five tables, the `knowledge_gap_status` enum, indexes and constraints |
+
 ## Tests
 
 `docker compose exec backend pytest`. See [`../testing.md`](../testing.md) for the full picture.
@@ -22,6 +50,7 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/tests/test_config.py` | `Settings` parsing: CORS origin splitting, whitespace, empty entries, defaults |
 | `backend/tests/test_health.py` | `/health` and `/health/db` against a stub, plus integration tests against real PostgreSQL |
 | `backend/tests/test_app.py` | Root route, OpenAPI schema, CORS headers, route uniqueness, `get_session` lifecycle |
+| `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, plus integration round trips against real PostgreSQL |
 
 ## Where new things go
 
@@ -29,8 +58,9 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 |---|---|---|
 | An HTTP endpoint | `backend/app/routers/<domain>.py` | Include the router in `main.py`, add a row above |
 | Business logic | `backend/app/services/<domain>.py` | Create the folder with the first file |
-| A database table | `backend/app/models/<domain>.py` | Migration story is still open - see `../architecture.md` |
+| A database table | `backend/app/models/<domain>.py` | Import it in `models/__init__.py`, then add an Alembic revision |
 | Request/response shape | `backend/app/schemas/<domain>.py` | Create the folder with the first file |
 | A setting | `backend/app/config.py` | Also add it to `.env.example` |
+| A field holding personal data | wherever it belongs | Mark it `info=PERSONAL_DATA` so `personal_data_columns()` finds it |
 
 Folders marked "create with the first file" do not exist yet - don't create them empty.

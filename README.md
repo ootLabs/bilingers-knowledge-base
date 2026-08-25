@@ -2,7 +2,7 @@
 
 A free educational app for parents and carers, built with the Bilingual Future Foundation. Users talk to an AI assistant grounded in the foundation's knowledge base, then check what they learned with a quiz that can end in a certificate.
 
-**Status: skeleton.** Three containers, health endpoints, tests, CI. No vector database, no LLM SDK, no model calls. What is deliberately absent and why: [`AGENTS.md`](AGENTS.md).
+**Status: skeleton.** Three containers, health endpoints, the core data model with migrations, tests, CI. No vector database, no LLM SDK, no model calls, no authentication. What is deliberately absent and why: [`AGENTS.md`](AGENTS.md).
 
 ## Run it
 
