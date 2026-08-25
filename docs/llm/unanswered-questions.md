@@ -1,6 +1,6 @@
 # Unanswered questions
 
-> Status: **not implemented.**
+> Status: **not implemented**, except the queue itself. `knowledge_gaps` exists (question text, status `new` / `in_progress` / `resolved`, optional link to the query it came from). Nothing writes to it and nothing reads it yet: that is T-33 on the detection side and T-80 on the review side.
 
 ## Why this matters
 
@@ -22,8 +22,8 @@ The team explicitly does not want to collect personal data it does not need. Tha
 
 - **How do we contact the person with the answer?** An email address is the obvious route and the most data we would hold. Is it optional - answer goes to the base regardless, and the address only exists if the user wants a personal reply?
 - **Consent wording** for storing an address, and how long it is kept.
-- **Can the question be stored without any identity at all?** If the value is mainly "what are parents asking", then yes - and that is the version that collects nothing.
-- **Free-text questions may contain personal details** about a child, volunteered by the parent. What is retained, and for how long?
+- ~~**Can the question be stored without any identity at all?**~~ **The schema already assumes yes.** `knowledge_gaps` keeps its own copy of the question text and links to the originating query with `ON DELETE SET NULL`, so erasing the query, the session, and the person leaves the question standing. "What are parents asking" survives; who asked it does not have to.
+- **Free-text questions may contain personal details** about a child, volunteered by the parent. What is retained, and for how long? The columns are already marked as personal data (`queries.question`, `queries.answer`, `knowledge_gaps.question`), so the retention job has a list to work from; the period itself waits on B-07.
 - Where do the questions land: a mailbox, an admin queue in the app, or both?
 - Rate limiting and spam handling on whatever collects them.
 

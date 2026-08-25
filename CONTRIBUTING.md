@@ -48,7 +48,15 @@ docker compose up -d --build --renew-anon-volumes frontend    # package.json cha
 
 The `--renew-anon-volumes` flag matters: `node_modules` lives in an anonymous volume that survives a plain rebuild, so without it the container keeps the old packages and you debug a ghost.
 
-`db/init/*.sql` runs **only** on an empty volume. After changing it, `docker compose down -v` and start again, or the change appears to do nothing.
+Migrations, which the `backend` container also applies on every start:
+
+```bash
+docker compose exec backend alembic upgrade head        # apply everything pending
+docker compose exec backend alembic current             # which revision is applied
+docker compose exec backend alembic revision -m "add x"  # new revision, then write the ops by hand
+```
+
+A schema change is **always** an Alembic revision. `db/init/*.sql` runs **only** on an empty volume, so a table added there exists on your machine and nowhere else; it holds the health probe and nothing more. After changing it, `docker compose down -v` and start again, or the change appears to do nothing.
 
 Tests: [`docs/testing.md`](docs/testing.md). All of them run in CI on every pull request.
 
@@ -183,7 +191,9 @@ Details in [`docs/conventions.md`](docs/conventions.md). The short version:
 
 ## Scope discipline
 
-This repository is intentionally a skeleton. Do not add a vector database, an LLM SDK, model API calls, or authentication without agreeing on it first - see "What is deliberately missing" in the README. Design notes for the AI layer live in [`docs/llm/`](docs/llm/README.md); extend the notes before extending the code.
+This repository is intentionally a skeleton. Do not add a vector database, an LLM SDK, model API calls, or authentication without agreeing on it first - see the status line in the README. Design notes for the AI layer live in [`docs/llm/`](docs/llm/README.md); extend the notes before extending the code.
+
+The `users` table is not an exception to that. It has a `password_hash` column and no hashing library, no login endpoint, and no session handling: the entity was modelled deliberately, authentication was not.
 
 ---
 

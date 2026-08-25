@@ -19,6 +19,11 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-08-25 - core data model and Alembic (T-11)
+**Done:** Five tables (`users`, `chat_sessions`, `queries`, `knowledge_base_versions`, `knowledge_gaps`) in `backend/app/models/`, under Alembic revision 0001, applied by the backend container before uvicorn starts. 46 backend tests at 100% coverage; verified on a wiped volume and through a full downgrade/upgrade cycle.
+**Decisions:** Two acceptance criteria are database constraints rather than conventions: `chat_sessions.user_id` is nullable so anonymous parents are countable (D5), and `queries` carries `CHECK (answer IS NULL OR knowledge_base_version_id IS NOT NULL)` so no answer can outlive knowledge of the base version behind it. Personal-data columns are marked `info=PERSONAL_DATA` and enumerated by `personal_data_columns()`; retention periods are deliberately absent, they wait on B-07. Erasure is designed as scrubbing marked columns, with person-facing foreign keys clearing (`SET NULL`) instead of cascading, so the cost ledger and the unanswered-question queue survive a deletion request.
+**Watch out:** `db/init/` is now the health probe only, and Alembic owns application schema. A table added to `db/init/` exists on your machine and nowhere else, because it runs only on an empty volume. `check_map.py` scans `backend/*.ini` (was `backend/pytest.ini`), otherwise `alembic.ini` reported as stale rather than unmapped.
+
 ## 2026-08-05 - branch model: main as production, dev as integration
 **Done:** `dev` created from `main`; branch rules rewritten in `AGENTS.md`, `CONTRIBUTING.md`, and the Cursor rules; CI now also triggers on pushes to `dev`. First real CI run on GitHub passed all four jobs in 63s.
 **Decisions:** Feature branches cut from `dev` and merge back there; `main` only takes release merges and hotfixes, with `--no-ff` so its log reads as releases rather than individual commits.

@@ -12,9 +12,11 @@ Free educational app giving parents reliable knowledge about raising a bilingual
 
 The repository is a **skeleton**. Deliberately absent, not to be added without an explicit request:
 
-no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel · no migrations
+no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel
 
-What exists: three containers that build and talk to each other, health endpoints, a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
+What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
+
+"No auth" still holds despite the `users` table: it has a password hash column and no hashing, no login, no sessions. The entity is modelled, authentication is not.
 
 ---
 
