@@ -1,12 +1,7 @@
-import { getTranslations } from "@/lib/i18n";
+import PlaceholderRoute from "@/components/PlaceholderRoute";
 
 export default function ChatPage() {
-  const t = getTranslations();
-
   return (
-    <main>
-      <h1>{t("chat.heading")}</h1>
-      <p>{t("chat.placeholder")}</p>
-    </main>
+    <PlaceholderRoute headingKey="chat.heading" placeholderKey="chat.placeholder" />
   );
 }

@@ -45,19 +45,16 @@
   --color-bg: #ffffff;
 
   /* Engineering defaults below: not sourced from T-03, not blocked by it.
-     T-03 explicitly did not derive a full spacing/radius scale or an error
-     color from the brand material, so these are ours to define. */
+     T-03 explicitly did not derive a spacing scale from the brand material,
+     so these are ours to define. Only the values an existing rule actually
+     consumes are listed here, add the next one alongside its first
+     consumer rather than filling out a full scale ahead of need. */
   --color-text-muted: #666666;
-  --color-danger: #dc2626;
-  --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.5rem;
   --space-6: 2rem;
-  --space-8: 3rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
 }
 
 @media (prefers-color-scheme: dark) {

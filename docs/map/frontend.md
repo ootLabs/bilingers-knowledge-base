@@ -6,11 +6,12 @@ Next.js 15, App Router, TypeScript. All user-facing copy is **Polish**; identifi
 |---|---|
 | `frontend/app/layout.tsx` | Root layout: `<html lang="pl">`, loads Poppins via `next/font/google`, renders `SiteHeader`, `metadata` (title/description) sourced through `lib/i18n` |
 | `frontend/app/page.tsx` | Landing page (`/`) - copy via `lib/i18n`, reads `NEXT_PUBLIC_API_URL`, links to `/chat` |
-| `frontend/app/chat/page.tsx` | Chat route (`/chat`) - placeholder, no chat logic yet (that is T-63 and later) |
-| `frontend/app/quiz/page.tsx` | Quiz route (`/quiz`) - placeholder, intentionally empty per T-14 scope |
-| `frontend/app/account/page.tsx` | Account route (`/account`) - placeholder, intentionally empty per T-14 scope |
-| `frontend/app/globals.css` | Design tokens as CSS variables (colors, spacing, radii, font), mobile first base layout, `:focus-visible` outline. Brand color/font/button-radius tokens are sourced from T-03 and marked provisional in a comment at the top of the file, see `../llm/i18n.md` and T-03 in Trello for why |
+| `frontend/app/chat/page.tsx` | Chat route (`/chat`) - renders `PlaceholderRoute` with the chat keys, no chat logic yet (that is T-63 and later) |
+| `frontend/app/quiz/page.tsx` | Quiz route (`/quiz`) - renders `PlaceholderRoute` with the quiz keys, intentionally empty per T-14 scope |
+| `frontend/app/account/page.tsx` | Account route (`/account`) - renders `PlaceholderRoute` with the account keys, intentionally empty per T-14 scope |
+| `frontend/app/globals.css` | Design tokens as CSS variables (colors, spacing, font, button radius), mobile first base layout, `:focus-visible` outline. Brand color/font/button-radius tokens are sourced from T-03 and marked provisional in a comment at the top of the file, see `../llm/i18n.md` and T-03 in Trello for why. Only tokens an existing rule consumes are defined, add the next one alongside its first consumer |
 | `frontend/components/SiteHeader.tsx` | Shared nav: brand link plus links to the four skeleton routes, labels via `lib/i18n` |
+| `frontend/components/PlaceholderRoute.tsx` | Shared body for the empty skeleton routes (chat/quiz/account): takes `headingKey`/`placeholderKey`, renders heading plus placeholder copy via `lib/i18n` |
 | `frontend/lib/i18n/config.ts` | `SUPPORTED_LOCALES`, `DEFAULT_LOCALE`, the `Locale` type |
 | `frontend/lib/i18n/locales/pl.ts` | Polish dictionary, the only active locale today |
 | `frontend/lib/i18n/translations.ts` | `getDictionary(locale)`, the one place a new locale gets registered |
@@ -29,10 +30,11 @@ Next.js 15, App Router, TypeScript. All user-facing copy is **Polish**; identifi
 |---|---|
 | `frontend/app/page.test.tsx` | Landing page rendering, Polish copy, the chat link, and both branches of the API URL fallback |
 | `frontend/app/layout.test.tsx` | Document language, header plus children in the body, exported `metadata` |
-| `frontend/app/chat/page.test.tsx` | Chat route renders its heading and placeholder copy |
-| `frontend/app/quiz/page.test.tsx` | Quiz route renders its heading and placeholder copy |
-| `frontend/app/account/page.test.tsx` | Account route renders its heading and placeholder copy |
+| `frontend/app/chat/page.test.tsx` | Chat route wires up the chat translation keys (renders the chat heading) |
+| `frontend/app/quiz/page.test.tsx` | Quiz route wires up the quiz translation keys (renders the quiz heading) |
+| `frontend/app/account/page.test.tsx` | Account route wires up the account translation keys (renders the account heading) |
 | `frontend/components/SiteHeader.test.tsx` | Every nav link points at the right route with the right Polish label |
+| `frontend/components/PlaceholderRoute.test.tsx` | Renders the heading and placeholder copy for the keys it is given, the shared rendering logic all three placeholder routes reuse |
 | `frontend/lib/i18n/index.test.ts` | Dot-path key resolution, the missing-key fallback, and its dev-only console warning |
 
 ## Where new things go

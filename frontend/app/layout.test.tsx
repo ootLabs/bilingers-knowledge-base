@@ -22,6 +22,7 @@ describe("root layout", () => {
       }>;
     }>;
     const bodyChildren = element.props.children.props.children;
+    expect(bodyChildren).toHaveLength(2);
     expect(bodyChildren[0].type).toBe(SiteHeader);
     expect(bodyChildren[1]).toBe(child);
   });
