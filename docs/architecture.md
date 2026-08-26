@@ -8,7 +8,7 @@ A free educational app for parents and carers raising a bilingual child. The use
 
 Target flow (most of it not built yet): the user opens the app → reads a short intro → picks one of 3-5 suggested starter questions or types their own → the backend retrieves matching passages from the foundation's knowledge base → the model answers from those passages only → the app proposes 3-5 deeper follow-up questions → after some conversation the user can take a ~10-question quiz → passing issues a certificate.
 
-**What exists today:** three containers, health endpoints, the core relational data model with migrations, and this documentation frame. Everything about retrieval, model calls, quiz, and certificates is design, not code - see `docs/llm/`.
+**What exists today:** three containers, health endpoints, the core relational data model with migrations, a stubbed streaming `POST /chat`, and this documentation frame. Everything about retrieval, real model calls, quiz, and certificates is design, not code - see `docs/llm/`.
 
 ## Main modules
 
@@ -35,7 +35,7 @@ browser → frontend (Next.js, :3000) → backend (FastAPI, :8000) → postgres 
 
 The frontend reaches the backend through `NEXT_PUBLIC_API_URL`, which must be a host-reachable URL because the browser makes the call. Backend → database uses `DATABASE_URL`, whose host is the compose service name `db`, resolvable only inside the compose network.
 
-Planned addition, once the AI layer lands: the backend gains a retrieval step and a model call between the request and the response, plus quota checks before either. Sketched in `docs/llm/retrieval.md` and `docs/llm/cost-control.md`.
+`POST /chat` exists but is plumbing, not the AI layer: it writes the question to `queries`, then streams back a fixed placeholder string, chunk by chunk. No retrieval, no model call, no orchestration - see `docs/llm/README.md`'s non-negotiables. Planned addition, once the AI layer lands: retrieval and a real model call replace the placeholder, plus quota checks before either. Sketched in `docs/llm/retrieval.md` and `docs/llm/cost-control.md`.
 
 ## Data model
 
@@ -80,6 +80,9 @@ The intended erasure model is **scrubbing marked columns rather than deleting ro
 | 2026-08-05 | Integration tests skip instead of failing when PostgreSQL is unreachable | Keeps the suite usable with nothing running, while CI always has a real database so nothing is quietly skipped there |
 | 2026-08-05 | Smoke test drives the real containers over HTTP | Unit tests pass on a machine where nothing starts; this is the check that answers "it works on my machine" |
 | 2026-08-05 | Two long-lived branches: `main` as production, `dev` as integration | Keeps `main` a readable release history and gives changes somewhere to accumulate and be tested together before they are called a release |
+| 2026-08-26 | `POST /chat` writes its `Query` row and commits before the response starts streaming | A connection dropped mid-answer must not leave the question unlogged for T-41's cost ledger; committing before any bytes stream is what guarantees that regardless of how the stream ends |
+| 2026-08-26 | `/chat` streams a fixed placeholder string rather than calling a model | T-12 is explicitly the pipe, not the engine (no RAG, no orchestration, no guardrails yet); the `answer` column also cannot be set without a `knowledge_base_version_id`, which does not exist until ingestion (T-01) runs |
+| 2026-08-26 | `app.services.chat` raises `ChatServiceUnavailable` instead of letting `SQLAlchemyError` reach the router | Sets the precedent for every future DB-backed router: `docs/conventions.md` requires services to raise domain exceptions and routers to translate them, not to catch an ORM type directly |
 | 2026-08-25 | Alembic, applied by the backend container on start | The first real schema change arrived, which is the trigger the 2026-08-05 decision named. Running it as part of the start command is what makes "works on a clean database with no manual steps" true rather than aspirational |
 | 2026-08-25 | Alembic owns every application table; `db/init/` keeps only the health probe | Two mechanisms defining schema is two sources of truth. `db/init/` cannot be the one that wins: it runs only on an empty volume, so it silently does nothing on every machine that already has data |
 | 2026-08-25 | Cost stored as `NUMERIC(12,6)`, never a float | This figure goes to the foundation for approval (D11). Accumulated float error in a number someone is asked to sign off on is not acceptable |

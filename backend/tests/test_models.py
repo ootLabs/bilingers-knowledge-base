@@ -11,7 +11,6 @@ constraint that only exists in Python is not a constraint.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
@@ -142,30 +141,6 @@ class TestPersonalDataRegistry:
         """A parent volunteers details about their child without being asked."""
         assert column(Query, "question").info.get("personal_data") is True
         assert column(KnowledgeGap, "question").info.get("personal_data") is True
-
-
-@pytest.fixture
-def db_session(require_database: None) -> Iterator[Session]:
-    """Session that always rolls back, so tests leave no rows behind."""
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection)
-    try:
-        yield session
-    finally:
-        session.close()
-        # A failed flush leaves the transaction deassociated, so rolling back
-        # unconditionally would warn about a transaction that is already gone.
-        if connection.in_transaction():
-            transaction.rollback()
-        connection.close()
-
-
-@pytest.fixture
-def migrated_database(require_database: None) -> None:
-    """Skip when the database is up but migrations have not been applied."""
-    if not inspect(engine).has_table("alembic_version"):
-        pytest.skip("database not migrated; run: docker compose exec backend alembic upgrade head")
 
 
 @pytest.mark.integration

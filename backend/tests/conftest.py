@@ -9,8 +9,9 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.db import engine, get_session
 from app.main import app
@@ -61,3 +62,27 @@ def database_available() -> bool:
 def require_database(database_available: bool) -> None:
     if not database_available:
         pytest.skip("no reachable database; start the stack with docker compose up")
+
+
+@pytest.fixture
+def db_session(require_database: None) -> Iterator[Session]:
+    """Session that always rolls back, so tests leave no rows behind."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    try:
+        yield session
+    finally:
+        session.close()
+        # A failed flush leaves the transaction deassociated, so rolling back
+        # unconditionally would warn about a transaction that is already gone.
+        if connection.in_transaction():
+            transaction.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def migrated_database(require_database: None) -> None:
+    """Skip when the database is up but migrations have not been applied."""
+    if not inspect(engine).has_table("alembic_version"):
+        pytest.skip("database not migrated; run: docker compose exec backend alembic upgrade head")
