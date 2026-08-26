@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# 32 lowercase hex characters is exactly uuid4().hex - the shape a client is
+# expected to mint one of. Anything shorter or non-hex is rejected outright:
+# this token is the only key to a conversation, it doubles as the future D5
+# quota key, and `queries.question` behind it is marked PERSONAL_DATA, so a
+# short or guessable token lets one client collide into another's history.
+_SESSION_TOKEN_PATTERN = r"^[0-9a-f]{32,64}$"
+
 
 class ChatRequest(BaseModel):
     """One question posted to a conversation.
 
     `session_token` is the opaque, client-generated identifier stored on
     `ChatSession.token` (see `app.models.chat`): the client mints it once per
-    conversation and keeps presenting it, so history and quota work without
-    an account.
+    conversation, typically `uuid4().hex`, and keeps presenting it, so
+    history and quota work without an account.
     """
 
     # Strips before length constraints are checked, not after: a Field-level
@@ -23,4 +30,4 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     question: str = Field(min_length=1, max_length=4000)
-    session_token: str = Field(min_length=1, max_length=64)
+    session_token: str = Field(pattern=_SESSION_TOKEN_PATTERN)

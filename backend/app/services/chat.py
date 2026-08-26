@@ -13,35 +13,40 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.chat import ChatSession, Query
 
 
 class ChatServiceUnavailable(Exception):
-    """A database failure prevented the chat request from being recorded.
+    """An infrastructure failure prevented the chat request from being
+    recorded: the database is unreachable, a connection dropped, and so on.
+    Not the client's fault - maps to a 503.
 
     Raised instead of letting `SQLAlchemyError` cross the service boundary,
-    so the router only ever translates one well-known exception into an HTTP
-    response (see `docs/conventions.md`: "services raise domain exceptions
+    so the router only ever translates well-known exceptions into HTTP
+    responses (see `docs/conventions.md`: "services raise domain exceptions
     and let the router translate them").
     """
 
 
-# Replaced once T-30/T-40 land. Short on purpose, so a test or a demo run
-# finishes in a handful of chunks rather than proving nothing new.
-#
-# English on purpose, unlike the rest of this product's user-facing text:
-# `docs/llm/i18n.md` bans hardcoded Polish in the backend outright ("not in
-# the backend, not in error messages returned by the API"). A real answer
-# will be Polish because the model generates it per request; this fixed,
-# developer-authored string is not that, so it does not get that exemption.
-PLACEHOLDER_ANSWER = (
-    "This is a placeholder answer from the /chat streaming skeleton (T-12). "
-    "No knowledge base retrieval or model call has run yet, see T-30/T-40. "
-    "It streams in a few chunks to prove the transport works end to end."
-)
+class InvalidChatInput(Exception):
+    """The database rejected the input itself, not the connection: a
+    constraint violation or data the driver refuses to store (a NUL byte in
+    a text column, for one real example). The client's fault - maps to a
+    422, not a 503, and is not worth retrying unchanged.
+    """
+
+
+# A sequence of opaque keys, not prose in any language: `docs/conventions.md`
+# says the backend returns data and keys, not sentences, and that holds for
+# a placeholder same as for real UI copy. Streaming several distinct chunks
+# (rather than one) is what proves the transport delivers pieces, not a
+# single blob - that mechanic is the entire point of this endpoint today.
+# Replaced once T-30/T-40 land: a real answer is per-request model output,
+# which is the one thing this product does source as prose from the backend.
+PLACEHOLDER_CHUNK_COUNT = 6
 
 
 def _find_by_token(session: Session, token: str) -> ChatSession | None:
@@ -69,19 +74,25 @@ def get_or_create_chat_session(session: Session, token: str) -> ChatSession:
             return chat_session
 
         chat_session = ChatSession(token=token)
-        session.add(chat_session)
         try:
-            session.flush()
-        except IntegrityError:
+            # A SAVEPOINT, not the outer transaction: this call is always
+            # the first thing the router does today, so there is nothing
+            # else to lose here, but scoping the rollback to just this
+            # insert keeps that true even if a future caller writes
+            # something before it (quota accounting in T-40/T-41, say).
+            with session.begin_nested():
+                session.add(chat_session)
+                session.flush()
+        except IntegrityError as error:
             # Lost a race: two requests on the same brand-new token both
             # missed the lookup above, and the other one committed first.
             # Recover by re-reading it instead of failing a valid question.
-            session.rollback()
             chat_session = _find_by_token(session, token)
             if chat_session is None:  # pragma: no cover - driver-level surprise, not recoverable
                 raise ChatServiceUnavailable(
                     "chat session insert conflicted but the token is not readable"
-                ) from None
+                ) from error
+            chat_session.last_active_at = datetime.now(UTC)
     except SQLAlchemyError as error:
         raise ChatServiceUnavailable("could not create the chat session") from error
 
@@ -107,19 +118,36 @@ def record_query(session: Session, chat_session: ChatSession, question: str) -> 
     session.add(query)
     try:
         session.commit()
+    except DataError as error:
+        # The driver itself refuses this data (a NUL byte in `question` is
+        # the real example this was written for) - the client's fault, and
+        # retrying the identical request would fail again the same way.
+        # IntegrityError is deliberately NOT caught here: the only
+        # constraint this insert can realistically violate is the
+        # chat_session_id foreign key, which means chat_session vanished
+        # between get_or_create_chat_session and this commit - a server-side
+        # race, not bad input, so it falls through to ChatServiceUnavailable.
+        raise InvalidChatInput("the question could not be stored as given") from error
     except SQLAlchemyError as error:
         raise ChatServiceUnavailable("could not record the question") from error
     return query
 
 
 def stream_placeholder_answer(question: str) -> Iterator[str]:
-    """Yield the stand-in answer in a few chunks.
+    """Yield a few opaque placeholder chunks.
 
     `question` is accepted but unused for now; it becomes the retrieval
     input once T-30 exists. Keeping the parameter here means the call site
     at the router does not change shape when that lands.
+
+    Never given `session`, on purpose: the request's database session is
+    closed as soon as the router returns this generator, before any of these
+    chunks are actually sent over the wire (a `Depends(get_session)` yield
+    dependency's cleanup runs right after the sync handler returns, not
+    after ASGI finishes streaming the body). Fine today, since nothing here
+    touches the database - but whatever eventually replaces this generator
+    with real per-chunk work (token/cost logging alongside T-30/T-40) needs
+    its own session, opened inside the generator, not this one.
     """
-    words = PLACEHOLDER_ANSWER.split(" ")
-    chunk_size = 4
-    for start in range(0, len(words), chunk_size):
-        yield " ".join(words[start : start + chunk_size]) + " "
+    for index in range(PLACEHOLDER_CHUNK_COUNT):
+        yield f"chat.placeholder_answer.chunk_{index}\n"

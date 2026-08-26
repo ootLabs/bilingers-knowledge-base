@@ -18,7 +18,16 @@ from app.main import app
 
 
 class StubSession:
-    """Stands in for a SQLAlchemy session; records what was executed."""
+    """Stands in for a SQLAlchemy session; records what was executed.
+
+    `execute()` always returns `None` and there is no `add`/`commit`/`flush`:
+    this only stands in for a *liveness*-style check (`SELECT 1` and similar,
+    see `test_health.py`). A test that posts a valid, fully-processed request
+    against the `client` fixture and expects the real service layer to run
+    will hit an `AttributeError` here, not real coverage - use `raw_client`
+    or `migrated_database` + `db_session`/`SessionLocal` against real
+    PostgreSQL for anything past request validation.
+    """
 
     def __init__(self) -> None:
         self.executed: list[str] = []
@@ -66,10 +75,17 @@ def require_database(database_available: bool) -> None:
 
 @pytest.fixture
 def db_session(require_database: None) -> Iterator[Session]:
-    """Session that always rolls back, so tests leave no rows behind."""
+    """Session that always rolls back, so tests leave no rows behind.
+
+    `autoflush=False, expire_on_commit=False` matches `app.db.SessionLocal`
+    on purpose: a test running against SQLAlchemy's defaults instead would
+    exercise different flush/expiry timing than real request traffic ever
+    gets, and could pass while masking a bug that only shows up under
+    `autoflush=False` (a read that depended on an implicit flush, say).
+    """
     connection = engine.connect()
     transaction = connection.begin()
-    session = Session(bind=connection)
+    session = Session(bind=connection, autoflush=False, expire_on_commit=False)
     try:
         yield session
     finally:

@@ -8,8 +8,8 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/app/config.py` | `Settings` (pydantic-settings) - env vars, `cors_origin_list`; module-level `settings` singleton |
 | `backend/app/db.py` | SQLAlchemy `engine`, `SessionLocal`, `get_session()` FastAPI dependency |
 | `backend/app/routers/health.py` | `GET /health` (liveness), `GET /health/db` (database reachability probe) |
-| `backend/app/routers/chat.py` | `POST /chat` - streams an answer; writes the `Query` row before streaming starts, translates `ChatServiceUnavailable` to `503` |
-| `backend/app/services/chat.py` | `get_or_create_chat_session`, `record_query`, `stream_placeholder_answer`, `ChatServiceUnavailable` - the streaming pipe from T-12, no RAG/model call yet |
+| `backend/app/routers/chat.py` | `POST /chat` - streams an answer; writes the `Query` row before streaming starts, translates `InvalidChatInput` to `422` and `ChatServiceUnavailable` to `503` |
+| `backend/app/services/chat.py` | `get_or_create_chat_session`, `record_query`, `stream_placeholder_answer`, `ChatServiceUnavailable`, `InvalidChatInput` - the streaming pipe from T-12, no RAG/model call yet |
 | `backend/app/schemas/chat.py` | `ChatRequest` (`question`, `session_token`); rejects blank/oversized input |
 | `backend/requirements.txt` | Pinned runtime dependencies |
 | `backend/requirements-dev.txt` | Test tooling on top of the runtime pins: pytest, pytest-cov, httpx |
