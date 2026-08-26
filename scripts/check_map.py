@@ -43,7 +43,7 @@ AREAS: list[tuple[str, list[str]]] = [
         [
             "backend/**/*.py",
             "backend/requirements*.txt",
-            "backend/pytest.ini",
+            "backend/*.ini",
         ],
     ),
     (

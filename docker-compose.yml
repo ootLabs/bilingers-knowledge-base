@@ -35,7 +35,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Migrations run before the app, so a clean volume needs no manual step.
+    # `exec` hands PID 1 to uvicorn: sh does not forward SIGTERM, so without it
+    # every stop waits out the full grace period and then gets killed.
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build:

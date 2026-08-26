@@ -28,8 +28,9 @@ backend/app/
   main.py       app assembly only: middleware, routers. No business logic.
   routers/      HTTP layer: request/response, validation, no business logic
   services/     business logic (create when the first one appears)
-  models/       SQLAlchemy models (create when the first one appears)
+  models/       SQLAlchemy models, one module per domain
   schemas/      Pydantic request/response models (create when the first one appears)
+alembic/        migration history, one revision per schema change
 ```
 
 A router calls a service; a service uses models. Never the other way round, and never a router touching the database directly beyond a health probe.
@@ -51,6 +52,10 @@ Don't create empty folders ahead of need. Create them with the first file that b
 
 - **Configuration:** every setting comes from an environment variable, read in `backend/app/config.py` (backend) or `process.env.NEXT_PUBLIC_*` (frontend). No magic values in code. Every new variable is added to `.env.example` with a safe placeholder.
 - **Database access:** through the `get_session` dependency. No module-level sessions, no connections opened inside request handlers.
+- **Schema changes:** an Alembic revision, always. Never `db/init/`, which only runs on an empty volume and so does nothing on a machine that already has data. Every model module is imported in `models/__init__.py`, or migrations cannot see its tables.
+- **Invariants that carry a decision** belong in the database as a constraint, not in a service as a rule someone has to remember. Uniqueness, nullability, and "an answer must name its source version" are all enforced in PostgreSQL.
+- **Money** is `Numeric`, never `Float`. Rounding error in a figure the foundation approves is not acceptable.
+- **Personal data:** a column holding it is declared `info=PERSONAL_DATA`. `personal_data_columns()` derives the retention inventory from that, so marking a field is the same edit as adding it. Erasure is designed as **scrubbing marked columns, not deleting rows**: the cost ledger and the queue of unanswered questions are facts about the service and have to outlive any individual's data. Where a foreign key points at a person, it clears (`chat_sessions.user_id`, `knowledge_gaps.query_id` are both `ON DELETE SET NULL`) rather than cascading. `queries.chat_session_id` cascades by deliberate contrast, because dropping a whole session row is administrative cleanup and not the erasure path.
 - **Errors:** raise `HTTPException` at the router boundary; services raise domain exceptions and let the router translate them. Never return a `200` with an error body.
 - **Validation:** Pydantic schemas at the boundary. Anything past the router is assumed valid.
 - **Async:** endpoints are sync until something is genuinely I/O-bound and async-capable. Don't mark a handler `async` while calling blocking code inside it.

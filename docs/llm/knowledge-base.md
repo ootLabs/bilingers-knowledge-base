@@ -11,7 +11,7 @@ The substantive material on raising bilingual children, authored and maintained 
 - **Format we receive it in** - documents, a CMS export, structured articles? This drives the whole ingestion design.
 - **Ownership and update cadence** - who publishes a change, and how often?
 - **Review before publishing** - does new content need approval before users see it, and who approves it?
-- **Versioning** - do we need to know which version of the base produced a given answer? (Useful when a wrong answer is reported.)
+- ~~**Versioning** - do we need to know which version of the base produced a given answer?~~ **Answered: yes, and it is built.** `knowledge_base_versions` records each ingest (version, ingest time, record count, source checksum), and `queries.knowledge_base_version_id` ties every answer to one. A database check constraint refuses to store an answer that names no version, because the base is expected to keep growing and an untraceable answer cannot be re-examined once it has.
 - **Granularity** - is the natural unit an article, a section, or a Q&A pair? Affects retrieval quality more than any other choice.
 
 ## Shape to aim for
@@ -31,6 +31,10 @@ Admin editing of the base is a planned feature (`Panel administracyjny`), so the
 
 - Chunking strategy - belongs with retrieval, see [`retrieval.md`](retrieval.md).
 - Embeddings and any vector storage - not until retrieval is actually being built.
+
+## What exists
+
+Only the version ledger described above, in `backend/app/models/knowledge.py`. No content has been ingested and nothing writes to the table yet: ingestion fills it, and the checksum column is what makes "have we already ingested this exact file?" answerable without keeping a copy of it.
 
 ## When this gets built
 

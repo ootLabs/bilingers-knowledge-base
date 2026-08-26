@@ -73,6 +73,12 @@ jobs:
             psql -h localhost -U bilingers -d bilingers -v ON_ERROR_STOP=1 -f "$file"
           done
 
+      # Proves the migrations run on a genuinely empty database, which is the
+      # only place that claim can be tested honestly.
+      - name: Apply migrations
+        working-directory: backend
+        run: alembic upgrade head
+
       - name: pytest
         working-directory: backend
         run: pytest
