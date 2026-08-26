@@ -17,6 +17,17 @@
  * block below needs to be recalculated from #00b4cd / #ffda00 / Lato, not
  * just swapped in place (see T-03 for the full palettes of all three
  * researched brands).
+ *
+ * KNOWN ISSUE, left open on purpose (do not fix by picking a new color
+ * here, the palette itself is what T-03 will settle): --color-primary
+ * (#2bade8) against the white --color-bg is ~2.55:1 contrast, below the
+ * 4.5:1 WCAG AA requirement for normal text. This is the LIGHT mode
+ * default, not a dark-mode-only gap. It affects every site that reads
+ * --color-primary as foreground on a light background: plain links (see
+ * `a` below), the focus ring (see `:focus-visible` below), and the white
+ * text on `.cta-button` (see below, background/foreground pair, both
+ * fail). Recheck contrast for all of these once T-03 resolves and the
+ * real palette lands, do not just carry #2bade8 forward unexamined.
  */
 :root {
   /* Brand, provisional: see the comment above before changing call sites. */
@@ -47,7 +58,6 @@
   --space-8: 3rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.75rem;
-  --breakpoint-sm: 40rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -57,8 +67,10 @@
     --color-text: #f2f2f2;
     --color-text-muted: #9a9a9a;
     /* Brand colors (primary/secondary/accent) are reused unchanged here.
-       Their contrast against this dark background has not been checked and
-       is not part of the T-03 research, revisit once the palette is final. */
+       Their contrast against this dark background has not been checked.
+       Note the light mode default above already fails WCAG AA for
+       --color-primary, see the KNOWN ISSUE note at the top of this file;
+       this dark-mode block was never meant to be the only gap. */
   }
 }
 
@@ -77,7 +89,12 @@ body {
   line-height: 1.6;
 }
 
-/* Mobile first: base layout is the phone layout, wider rules only add. */
+/* Mobile first: base layout is the phone layout, wider rules only add.
+ * The 40rem breakpoint is hardcoded in both places below instead of a
+ * --breakpoint token: CSS custom properties cannot be used inside an
+ * @media condition, so a token here would be dead, read only at the two
+ * literal call sites and never actually driving them. If this value
+ * changes, update both occurrences together. */
 main {
   padding: var(--space-4);
   max-width: 40rem;
@@ -90,10 +107,13 @@ main {
   }
 }
 
+/* --color-primary on white fails WCAG AA (~2.55:1, needs 4.5:1), see the
+   KNOWN ISSUE note at the top of this file. Left as-is pending T-03. */
 a {
   color: var(--color-primary);
 }
 
+/* Same known contrast gap as the `a` rule above. */
 :focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -131,6 +151,8 @@ a {
   text-decoration: underline;
 }
 
+/* White text on --color-primary is also below WCAG AA, same known gap
+   noted at the top of this file, both foreground and background sides. */
 .cta-button {
   display: inline-block;
   margin-top: var(--space-4);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import SiteHeader from "@/components/SiteHeader";
+
 import RootLayout, { metadata } from "./layout";
 
 // The layout renders <html> and <body>, which cannot be mounted inside a test
@@ -15,9 +17,12 @@ describe("root layout", () => {
   it("renders the site header before the page content in the body", () => {
     const child = "content";
     const element = RootLayout({ children: child }) as React.ReactElement<{
-      children: React.ReactElement<{ children: React.ReactNode[] }>;
+      children: React.ReactElement<{
+        children: [React.ReactElement<unknown>, React.ReactNode];
+      }>;
     }>;
     const bodyChildren = element.props.children.props.children;
+    expect(bodyChildren[0].type).toBe(SiteHeader);
     expect(bodyChildren[1]).toBe(child);
   });
 
