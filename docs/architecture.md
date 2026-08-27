@@ -8,7 +8,7 @@ A free educational app for parents and carers raising a bilingual child. The use
 
 Target flow (most of it not built yet): the user opens the app → reads a short intro → picks one of 3-5 suggested starter questions or types their own → the backend retrieves matching passages from the foundation's knowledge base → the model answers from those passages only → the app proposes 3-5 deeper follow-up questions → after some conversation the user can take a ~10-question quiz → passing issues a certificate.
 
-**What exists today:** three containers, health endpoints, this documentation frame, and (as of T-14) a frontend routing skeleton with a Polish-only translation layer and design tokens from T-03. The chat, quiz, and account routes exist but hold placeholder copy only. Everything about retrieval, models, quiz logic, and certificates is design, not code - see `docs/llm/`.
+**What exists today:** three containers, health endpoints, the core relational data model with migrations, a stubbed streaming `POST /chat`, a frontend routing skeleton with a Polish-only translation layer and design tokens, and this documentation frame. The chat, quiz, and account routes exist but hold placeholder copy only. Everything about retrieval, real model calls, quiz logic, and certificates is design, not code - see `docs/llm/`.
 
 ## Main modules
 
@@ -35,7 +35,7 @@ browser → frontend (Next.js, :3000) → backend (FastAPI, :8000) → postgres 
 
 The frontend reaches the backend through `NEXT_PUBLIC_API_URL`, which must be a host-reachable URL because the browser makes the call. Backend → database uses `DATABASE_URL`, whose host is the compose service name `db`, resolvable only inside the compose network.
 
-Planned addition, once the AI layer lands: the backend gains a retrieval step and a model call between the request and the response, plus quota checks before either. Sketched in `docs/llm/retrieval.md` and `docs/llm/cost-control.md`.
+`POST /chat` exists but is plumbing, not the AI layer: it writes the question to `queries`, then streams back a fixed placeholder string, chunk by chunk. No retrieval, no model call, no orchestration - see `docs/llm/README.md`'s non-negotiables. Planned addition, once the AI layer lands: retrieval and a real model call replace the placeholder, plus quota checks before either. Sketched in `docs/llm/retrieval.md` and `docs/llm/cost-control.md`.
 
 ## Data model
 
@@ -87,6 +87,10 @@ The intended erasure model is **scrubbing marked columns rather than deleting ro
 | 2026-08-25 | Cost stored as `NUMERIC(12,6)`, never a float | This figure goes to the foundation for approval (D11). Accumulated float error in a number someone is asked to sign off on is not acceptable |
 | 2026-08-25 | Personal data marked in the model with `info=PERSONAL_DATA`, retention unimplemented | Marking is cheap now and expensive to retrofit across a grown schema. Retention periods depend on GDPR answers nobody has yet, and inventing them would look like compliance without being it |
 | 2026-08-25 | GDPR erasure scrubs marked columns; person-facing foreign keys clear rather than cascade | Deleting a person must not delete the spending record or the list of what parents ask. Those are aggregate facts about the service, not facts about the individual |
+| 2026-08-26 | `POST /chat` writes its `Query` row and commits before the response starts streaming | A connection dropped mid-answer must not leave the question unlogged for T-41's cost ledger; committing before any bytes stream is what guarantees that regardless of how the stream ends |
+| 2026-08-26 | `/chat` streams a fixed sequence of opaque placeholder chunks rather than calling a model | T-12 is explicitly the pipe, not the engine (no RAG, no orchestration, no guardrails yet); the `answer` column also cannot be set without a `knowledge_base_version_id`, which does not exist until ingestion (T-01) runs. Keys, not prose, so the placeholder does not itself violate "the backend returns data and keys, not sentences" while it is standing in for a real answer |
+| 2026-08-26 | `app.services.chat` raises `ChatServiceUnavailable` or `InvalidChatInput` instead of letting `SQLAlchemyError` reach the router | Sets the precedent for every future DB-backed router: `docs/conventions.md` requires services to raise domain exceptions and routers to translate them. The two exceptions map to different HTTP statuses (503 vs 422) because a bad connection and a rejected question are not the same failure and should not both cause a client to retry blindly |
+| 2026-08-26 | `ChatRequest.session_token` requires 32-64 lowercase hex characters | The token is the only key to a conversation and a future D5 quota; `min_length=1` let two unrelated clients collide into the same `ChatSession` and its `PERSONAL_DATA`-marked questions by both picking a short token |
 
 ## Integrations / external dependencies
 
