@@ -4,12 +4,11 @@ no-orphan write order, and (against real PostgreSQL) actual persistence.
 
 from __future__ import annotations
 
-import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -31,36 +30,6 @@ from app.services.chat import (
 # session_token pattern requires and what a real client is expected to mint.
 _VALID_TOKEN = "a" * 32
 
-
-def _unique_token() -> str:
-    """A `chat_sessions.token` guaranteed not to collide with a previous
-    run, and valid against `ChatRequest`'s hex pattern."""
-    return uuid.uuid4().hex
-
-
-@pytest.fixture
-def committed_token() -> Iterator[Callable[[], str]]:
-    """Mints tokens for tests that commit for real, through the live
-    endpoint or a real session, and deletes their rows afterward.
-
-    Deleting `chat_sessions` cascades to `queries` (`ondelete="CASCADE"`),
-    so this also removes their questions - `queries.question` is marked
-    PERSONAL_DATA, and a local `pytest` run targets a developer's actual
-    database, so leftover rows are not just clutter.
-    """
-    tokens: list[str] = []
-
-    def make() -> str:
-        token = _unique_token()
-        tokens.append(token)
-        return token
-
-    yield make
-
-    if tokens:
-        with SessionLocal() as session:
-            session.execute(delete(ChatSession).where(ChatSession.token.in_(tokens)))
-            session.commit()
 
 
 class TestValidation:
@@ -300,9 +269,12 @@ class TestServiceErrorTranslation:
 @pytest.mark.integration
 class TestChatServiceAgainstRealDatabase:
     def test_reusing_a_session_bumps_last_active_at(
-        self, migrated_database: None, db_session: Session
+        self,
+        migrated_database: None,
+        db_session: Session,
+        committed_token: Callable[[], str],
     ) -> None:
-        token = _unique_token()
+        token = committed_token()
 
         first = get_or_create_chat_session(db_session, token)
         first_seen = first.last_active_at

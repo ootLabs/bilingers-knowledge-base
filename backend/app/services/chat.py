@@ -146,8 +146,10 @@ def stream_placeholder_answer(question: str) -> Iterator[str]:
     dependency's cleanup runs right after the sync handler returns, not
     after ASGI finishes streaming the body). Fine today, since nothing here
     touches the database - but whatever eventually replaces this generator
-    with real per-chunk work (token/cost logging alongside T-30/T-40) needs
-    its own session, opened inside the generator, not this one.
+    with real per-chunk work needs its own session, opened inside the
+    generator, not this one. For the cost measurement specifically that is
+    already solved: call `app.services.usage.record_usage` with the query id
+    once the real stream ends, and it opens a session of its own.
     """
     for index in range(PLACEHOLDER_CHUNK_COUNT):
         yield f"chat.placeholder_answer.chunk_{index}\n"

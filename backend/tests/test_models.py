@@ -14,7 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import CheckConstraint, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -72,8 +72,22 @@ class TestAnonymousSessions:
 
 class TestQueryLedger:
     def test_records_everything_needed_to_report_cost(self) -> None:
-        for name in ("model", "input_tokens", "output_tokens", "cost_usd", "duration_ms"):
+        for name in (
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "cost_usd",
+            "cost_pln",
+            "fx_rate_pln_per_usd",
+            "pricing_version",
+            "duration_ms",
+        ):
             assert name in Query.__table__.columns
+
+    def test_the_foundation_facing_amount_is_in_pln(self) -> None:
+        """USD is kept for reconciling the provider invoice, but the figure the
+        foundation approves is in its own currency, not converted at read time."""
+        assert column(Query, "cost_pln").type.python_type is Decimal
 
     def test_cost_is_fixed_point(self) -> None:
         """Money reported to the foundation must not accumulate float error."""
@@ -87,6 +101,15 @@ class TestQueryLedger:
     def test_answer_requires_a_base_version(self) -> None:
         names = {constraint.name for constraint in Query.__table__.constraints}
         assert "queries_answer_requires_kb_version" in names
+
+    def test_cost_carries_its_attribution_and_provenance(self) -> None:
+        """Declared here; that each one actually fires is in `test_usage.py`."""
+        names = {constraint.name for constraint in Query.__table__.constraints}
+        assert {
+            "queries_cost_requires_model",
+            "queries_cost_requires_pricing_provenance",
+            "queries_measurements_non_negative",
+        } <= names
 
     def test_a_referenced_base_version_cannot_be_deleted(self) -> None:
         """Declared here; that it actually fires is a database-level test below."""
@@ -155,6 +178,49 @@ class TestMigrations:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
         assert revision
 
+    def test_the_check_constraints_on_queries_match_the_model(
+        self, migrated_database: None
+    ) -> None:
+        """Every one of these is written twice: once as a `CheckConstraint` here
+        and once as SQL in a migration. `alembic check` does not compare check
+        constraints at all, so without this a database built from the metadata
+        and one built from migrations could enforce different rules on a figure
+        reported to a funder, with both test suites green.
+        """
+        declared = {
+            constraint.name
+            for constraint in Query.__table__.constraints
+            if isinstance(constraint, CheckConstraint)
+        }
+        with engine.connect() as connection:
+            applied = set(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'queries'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+
+        assert declared == applied
+
+    def test_no_constraint_is_left_unvalidated(self, migrated_database: None) -> None:
+        """An unvalidated constraint is enforced going forward but never checked
+        against what is already stored, so the model claims a guarantee the
+        table does not hold and `pg_dump` stops matching the metadata. Revision
+        0002 clears the pre-existing partial costs instead."""
+        with engine.connect() as connection:
+            unvalidated = list(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'queries'::regclass AND NOT convalidated"
+                    )
+                ).scalars()
+            )
+
+        assert unvalidated == []
+
 
 @pytest.mark.integration
 class TestRealSchema:
@@ -175,6 +241,12 @@ class TestRealSchema:
             input_tokens=120,
             output_tokens=40,
             cost_usd=Decimal("0.000345"),
+            # The database refuses a partial measurement: an amount in PLN
+            # is only reproducible together with the rate and the price list
+            # that produced it (queries_cost_requires_pricing_provenance).
+            cost_pln=Decimal("0.001397"),
+            fx_rate_pln_per_usd=Decimal("4.050000"),
+            pricing_version="test-2026-08",
             duration_ms=850,
         )
         db_session.add(query)

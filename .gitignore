@@ -39,3 +39,7 @@ Thumbs.db
 
 # Claude Code local overrides
 .claude/settings.local.json
+
+# Real price list: operational config with a real rate and real prices.
+# Shape and instructions live in backend/pricing.example.json.
+backend/pricing.json

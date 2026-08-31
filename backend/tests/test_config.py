@@ -49,3 +49,15 @@ def test_defaults_are_usable_without_any_environment() -> None:
     assert settings.app_name
     assert settings.database_url.startswith("postgresql+psycopg://")
     assert settings.cors_origin_list
+
+
+def test_the_price_list_path_defaults_inside_the_container() -> None:
+    """Same reasoning as the `db` host in `database_url`: the backend reads this
+    path from inside its own container, where the mount puts the file at /app."""
+    assert Settings().pricing_file == "/app/pricing.json"
+
+
+def test_the_price_list_path_is_configurable() -> None:
+    assert Settings(pricing_file="/etc/bilingers/prices.json").pricing_file == (
+        "/etc/bilingers/prices.json"
+    )

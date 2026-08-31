@@ -28,6 +28,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://bilingers:bilingers@db:5432/bilingers}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      PRICING_FILE: ${PRICING_FILE:-/app/pricing.json}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
