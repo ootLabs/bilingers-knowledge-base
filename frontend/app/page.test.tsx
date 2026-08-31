@@ -20,6 +20,11 @@ describe("landing page", () => {
     render(<Home />);
     expect(document.querySelector("code")?.textContent).toMatch(/^https?:\/\//);
   });
+
+  it("links to the chat route as the primary call to action", () => {
+    render(<Home />);
+    expect(screen.getByRole("link", { name: /czatu/i })).toHaveAttribute("href", "/chat");
+  });
 });
 
 describe("API URL configuration", () => {
