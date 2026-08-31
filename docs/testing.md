@@ -21,6 +21,7 @@ The last two also run from the pre-commit hook. All of them run in CI on every p
 |---|---|---|---|
 | Unit | `backend/tests/test_config.py`, `test_app.py` | Parsing, wiring, resource lifecycle | no |
 | API | `backend/tests/test_health.py` (stubbed) | Status codes, payload shapes, CORS | no |
+| Panel | `backend/tests/test_panel_*.py` | Login, lockout, sessions, resets, roles - real SQL, in memory | no |
 | Integration | `backend/tests/` marked `integration` | Real SQL, real driver, migrated schema, database constraints | yes |
 | Component | `frontend/app/*.test.tsx` | Rendering, Polish copy, config fallbacks | no |
 | Type | `npm run typecheck`, `npm run build` | Type errors, broken imports, build failures | no |
@@ -39,6 +40,8 @@ docker compose exec backend pytest -m integration         # only them
 ```
 
 CI always runs them, against a real PostgreSQL service container with `db/init/` applied and `alembic upgrade head` run against an empty database. A skipped integration test in CI would defeat the purpose, and the migration step doubles as the only honest test that migrations work from zero.
+
+Panel authentication is the one area that runs against a database in *both* layers. Its behaviour (who gets in, what a lockout does, which sessions survive a password change) runs on an in-memory SQLite database built from the same models, through the `panel_db` fixture: a stub cannot answer any of those questions, and putting all of it behind `integration` would remove the panel from every run that has nothing started. What is specifically PostgreSQL's (the migration chain, the unique constraint on an address, the role stored as a value rather than a member name, an attempt that survives its own failed login) is asserted against PostgreSQL in the `integration` classes. A rule enforced by the database belongs in the second group, not the first.
 
 Tests that need the migrated schema also depend on a `migrated_database` fixture, which skips with the command to run when the database is up but the tables are not there. Same reasoning as above: a laptop with a stale volume gets an actionable skip, while CI always migrates first so nothing is quietly skipped there.
 
