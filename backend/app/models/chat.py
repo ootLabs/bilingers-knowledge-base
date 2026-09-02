@@ -75,6 +75,11 @@ class Query(Base):
     The measurement columns are nullable because not every question reaches a
     model: an off-topic question is rejected by retrieval, and one over quota is
     rejected before that. Both are still worth a row.
+
+    The row is written before the answer streams and its measurement is filled
+    in afterwards, which is completing a row rather than editing one:
+    `app.services.usage.record_usage` refuses a second write, so a retry cannot
+    double-count or replace a cost that was already reported.
     """
 
     __tablename__ = "queries"
@@ -86,6 +91,34 @@ class Query(Base):
         CheckConstraint(
             "answer IS NULL OR knowledge_base_version_id IS NOT NULL",
             name="queries_answer_requires_kb_version",
+        ),
+        # "Summable per model" is a promise the report makes to the foundation,
+        # so a cost with no model to attribute it to is refused here rather
+        # than discovered later as a row that quietly falls out of a GROUP BY.
+        CheckConstraint(
+            "cost_pln IS NULL OR (model IS NOT NULL "
+            "AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL)",
+            name="queries_cost_requires_model",
+        ),
+        # A PLN figure is only reproducible with the rate and the price list
+        # that produced it, and both move. All four travel together or none do.
+        CheckConstraint(
+            "(cost_pln IS NULL AND cost_usd IS NULL "
+            "AND fx_rate_pln_per_usd IS NULL AND pricing_version IS NULL) "
+            "OR (cost_pln IS NOT NULL AND cost_usd IS NOT NULL "
+            "AND fx_rate_pln_per_usd IS NOT NULL AND pricing_version IS NOT NULL)",
+            name="queries_cost_requires_pricing_provenance",
+        ),
+        # A negative token count or cost is not a small error in a budget
+        # report, it is a number that hides another number by cancelling it.
+        CheckConstraint(
+            "(input_tokens IS NULL OR input_tokens >= 0) "
+            "AND (output_tokens IS NULL OR output_tokens >= 0) "
+            "AND (cost_usd IS NULL OR cost_usd >= 0) "
+            "AND (cost_pln IS NULL OR cost_pln >= 0) "
+            "AND (fx_rate_pln_per_usd IS NULL OR fx_rate_pln_per_usd > 0) "
+            "AND (duration_ms IS NULL OR duration_ms >= 0)",
+            name="queries_measurements_non_negative",
         ),
     )
 
@@ -107,7 +140,16 @@ class Query(Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     # Fixed point, never a float: this figure is reported to the foundation.
+    # Both currencies are kept: the provider invoices in USD, so that column is
+    # what reconciles against the bill, while the foundation approves and reads
+    # PLN. Deriving one from the other at report time is not equivalent,
+    # because the rate on the day of the query is the only honest one.
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    cost_pln: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    fx_rate_pln_per_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    # Which price list produced the figures above, so a number reported months
+    # ago can still be traced to the prices behind it.
+    pricing_version: Mapped[str | None] = mapped_column(String(50))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
 
     created_at: Mapped[datetime] = mapped_column(

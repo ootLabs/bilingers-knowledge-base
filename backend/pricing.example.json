@@ -1,0 +1,19 @@
+{
+  "_note": "Copy to backend/pricing.json and replace every number below. The names and prices here are illustrative placeholders: no provider is chosen yet (docs/llm/README.md). Amounts are strings so they parse as exact decimals, per million tokens, in the currency named below. Editing the real file takes effect on the next request, with no restart.",
+  "version": "example-not-for-use",
+  "currency": "USD",
+  "fx_rate_pln_per_usd": "4.000000",
+  "fx_rate_source": "State the table and date the rate came from, for example: NBP average rate, table 000/A/NBP/2026, 2026-01-01",
+  "models": {
+    "example-small-model": {
+      "input_per_million": "0.150000",
+      "output_per_million": "0.600000",
+      "source": "Link to the provider price page and the date it was checked"
+    },
+    "example-large-model": {
+      "input_per_million": "3.000000",
+      "output_per_million": "15.000000",
+      "source": "Link to the provider price page and the date it was checked"
+    }
+  }
+}

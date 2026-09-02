@@ -8,3 +8,7 @@ venv/
 .env
 .env.*
 *.egg-info/
+
+# Operational price list: a real rate and real prices, never baked into an
+# image. Shape and instructions live in pricing.example.json.
+pricing.json

@@ -14,9 +14,11 @@ The repository is a **skeleton**. Deliberately absent, not to be added without a
 
 no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel
 
-What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a stubbed streaming `POST /chat` (writes the question, streams back a fixed placeholder, no model call), a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
+What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a stubbed streaming `POST /chat` (writes the question, streams back a fixed placeholder, no model call), the cost ledger with its configurable price list and reporting views (nothing writes a measurement yet, because nothing calls a model), a frontend routing skeleton with a Polish-only translation layer and design tokens (every route holds placeholder copy), a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - design notes, not code, with `cost-control.md` the one exception: its measurement half is built.
 
 "No auth" still holds despite the `users` table: it has a password hash column and no hashing, no login, no sessions. The entity is modelled, authentication is not.
+
+"No quiz" and "no certificates" still hold despite the `/quiz` route, and "no auth" despite `/account`: each renders one heading and one placeholder paragraph through `PlaceholderRoute`. No questions, no scoring, nothing issued, no login. The routes are reserved, the features are not.
 
 ---
 
