@@ -58,6 +58,16 @@ docker compose exec backend alembic revision -m "add x"  # new revision, then wr
 
 A schema change is **always** an Alembic revision. `db/init/*.sql` runs **only** on an empty volume, so a table added there exists on your machine and nowhere else; it holds the health probe and nothing more. After changing it, `docker compose down -v` and start again, or the change appears to do nothing.
 
+### Two branches, two migrations
+
+Let `alembic revision` generate the identifier and **never hand-write one**. It produces a random 12-character hash, and `file_template` puts the date in the filename so the directory still sorts chronologically. Sequential numbers look tidier and are a trap: two people cutting from the same head both reach for the same next number, and a duplicate revision id is only a `UserWarning` in Alembic. One of the two migrations then disappears from the history and the tables it was supposed to create are silently never made.
+
+Unique identifiers are only half of it. Two migrations naming the same `down_revision` leave the history with **two heads**, and `alembic upgrade head` then refuses to run at all. The backend container runs exactly that before uvicorn, so the symptom is a service that never answers while its log repeats one Alembic error.
+
+**The rule: whoever merges second retargets.** Pull `dev`, point your migration's `down_revision` at the revision that landed first, and re-run it against a clean database. Prefer that over `alembic merge`, which leaves a permanent revision that does nothing; keep `merge` for migrations already released and therefore unrewritable.
+
+Two tests in `backend/tests/test_models.py` fail on either mistake, so this is checked and not merely agreed.
+
 Tests: [`docs/testing.md`](docs/testing.md). All of them run in CI on every pull request.
 
 ---

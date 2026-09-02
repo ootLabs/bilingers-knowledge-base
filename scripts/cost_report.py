@@ -31,7 +31,7 @@ POSTGRES_USER = os.environ.get("POSTGRES_USER", "bilingers")
 POSTGRES_DB = os.environ.get("POSTGRES_DB", "bilingers")
 DB_SERVICE = os.environ.get("DB_SERVICE", "db")
 
-# Must match the zone the views bucket in (see revision 0002): a filter and
+# Must match the zone the views bucket in (see the cost ledger revision): a filter and
 # a grouping that disagree would report a month the report itself cannot show.
 REPORT_TIMEZONE = "Europe/Warsaw"
 

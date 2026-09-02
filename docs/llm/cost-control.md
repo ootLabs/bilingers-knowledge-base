@@ -72,7 +72,7 @@ The exchange rate is set by the operator, not fetched. An auto-updated rate woul
 
 ## What exists: reading the numbers back
 
-Two views, created by migration 0002. Both are free of personal data by construction: no question text, no session token, only ids and numbers, so a monthly report can be handed over without a scrubbing step first.
+Two views, created by the cost ledger revision. Both are free of personal data by construction: no question text, no session token, only ids and numbers, so a monthly report can be handed over without a scrubbing step first.
 
 | View | Holds |
 |---|---|

@@ -11,9 +11,13 @@ constraint that only exists in Python is not a constraint.
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import CheckConstraint, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -37,6 +41,23 @@ EXPECTED_TABLES = {
     "knowledge_gaps",
     "knowledge_base_versions",
 }
+
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+VERSIONS_DIR = BACKEND_ROOT / "alembic" / "versions"
+# Matches `revision: str = "abc123"` and the plain `revision = "abc123"` form.
+REVISION_ID = re.compile(r'^revision(?::\s*str)?\s*=\s*"([^"]+)"', re.MULTILINE)
+
+
+def script_directory() -> ScriptDirectory:
+    """Alembic's view of the migration history, with no database involved.
+
+    Built without `alembic.ini` on purpose: only `script_location` matters here,
+    and skipping the file avoids dragging its logging configuration in.
+    """
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    return ScriptDirectory.from_config(config)
 
 
 def column(model: type, name: str):
@@ -166,6 +187,49 @@ class TestPersonalDataRegistry:
         assert column(KnowledgeGap, "question").info.get("personal_data") is True
 
 
+class TestMigrationHistory:
+    """Guards the two ways parallel branches break the migration chain.
+
+    Both are cheap to cause and expensive to notice: two people cutting from the
+    same head reach for the same next identifier, and the damage only shows up
+    when the branches meet. Neither test needs a database, so they run even with
+    nothing started.
+    """
+
+    def test_no_two_migrations_declare_the_same_revision_id(self) -> None:
+        """Reads the files rather than asking Alembic, because Alembic is not
+        strict about this: a duplicate id is a `UserWarning`, after which one of
+        the two migrations quietly disappears from the history and the tables it
+        was supposed to create are never made. Nothing else would notice."""
+        seen: dict[str, str] = {}
+        collisions: list[str] = []
+        for path in sorted(VERSIONS_DIR.glob("*.py")):
+            match = REVISION_ID.search(path.read_text(encoding="utf-8"))
+            assert match is not None, f"{path.name} declares no revision id"
+            revision = match.group(1)
+            if revision in seen:
+                collisions.append(f"{revision} in {seen[revision]} and {path.name}")
+            seen[revision] = path.name
+
+        assert collisions == [], (
+            "two migrations claim the same revision id; give the newer one its own "
+            "and point its down_revision at the other: " + "; ".join(collisions)
+        )
+
+    def test_the_history_has_exactly_one_head(self) -> None:
+        """Two heads make `alembic upgrade head` fail outright, and the backend
+        container runs exactly that before uvicorn, so the symptom is a service
+        that never answers and a log repeating the same Alembic error. Happens
+        whenever two migrations name the same `down_revision`, even with
+        different ids of their own."""
+        heads = script_directory().get_heads()
+
+        assert len(heads) == 1, (
+            f"migration history has {len(heads)} heads ({', '.join(heads)}); "
+            "the one merging second should point its down_revision at the other"
+        )
+
+
 @pytest.mark.integration
 class TestMigrations:
     def test_every_table_exists_after_migrating(self, migrated_database: None) -> None:
@@ -208,7 +272,7 @@ class TestMigrations:
         """An unvalidated constraint is enforced going forward but never checked
         against what is already stored, so the model claims a guarantee the
         table does not hold and `pg_dump` stops matching the metadata. Revision
-        0002 clears the pre-existing partial costs instead."""
+        The cost ledger revision clears the pre-existing partial costs instead."""
         with engine.connect() as connection:
             unvalidated = list(
                 connection.execute(

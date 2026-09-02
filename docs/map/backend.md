@@ -35,16 +35,16 @@ Alembic owns every application table. `db/init/` is container bootstrap and neve
 
 ```bash
 docker compose exec backend alembic upgrade head          # apply (the backend also does this on start)
-docker compose exec backend alembic revision -m "..."     # new revision, then hand-write the ops
+docker compose exec backend alembic revision -m "..."     # new revision, then hand-write the ops (never the id)
 docker compose exec backend alembic current               # which revision is applied
 ```
 
 | Path | What's in it |
 |---|---|
-| `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, logging. No `sqlalchemy.url` on purpose |
+| `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, `file_template` (date in the filename, generated hash as the revision id), logging. No `sqlalchemy.url` on purpose |
 | `backend/alembic/env.py` | Reads `DATABASE_URL` via `app.config`, sets `target_metadata` from `app.models.Base` |
 | `backend/alembic/versions/0001_core_data_model.py` | First revision: the five tables, the `knowledge_gap_status` enum, indexes and constraints |
-| `backend/alembic/versions/0002_cost_ledger_pln_and_report_views.py` | Adds `queries.cost_pln`, `fx_rate_pln_per_usd`, `pricing_version`, the three cost check constraints, and the `query_costs` / `query_costs_monthly` reporting views |
+| `backend/alembic/versions/20260831_a2363c74818b_cost_ledger_pln_and_report_views.py` | Adds `queries.cost_pln`, `fx_rate_pln_per_usd`, `pricing_version`, the three cost check constraints, and the `query_costs` / `query_costs_monthly` reporting views |
 
 ## Tests
 
@@ -56,7 +56,7 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/tests/test_config.py` | `Settings` parsing: CORS origin splitting, whitespace, empty entries, defaults |
 | `backend/tests/test_health.py` | `/health` and `/health/db` against a stub, plus integration tests against real PostgreSQL |
 | `backend/tests/test_app.py` | Root route, OpenAPI schema, CORS headers, route uniqueness, `get_session` lifecycle |
-| `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, ORM check constraints matching the migrated database, plus integration round trips against real PostgreSQL |
+| `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, ORM check constraints matching the migrated database, one migration head and no duplicate revision ids, plus integration round trips against real PostgreSQL |
 | `backend/tests/test_chat.py` | Validation, the write-before-stream order, `SQLAlchemyError` to `503`, plus integration tests proving real persistence and session reuse |
 | `backend/tests/test_pricing.py` | Price list parsing and refusals, exact decimals, reload after an edit, loud failure on a broken one, the shipped example still parsing |
 | `backend/tests/test_usage.py` | Cost arithmetic in USD and PLN, `LedgerSession` double, write-once under concurrency, rollback leaving a row retriable, plus integration tests firing each cost constraint |

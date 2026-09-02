@@ -1,6 +1,6 @@
 """Cost ledger in PLN, its provenance columns, and the reporting views
 
-Revision ID: 0002
+Revision ID: a2363c74818b
 Revises: 0001
 """
 
@@ -11,7 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0002"
+revision: str = "a2363c74818b"
 down_revision: str | None = "0001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
