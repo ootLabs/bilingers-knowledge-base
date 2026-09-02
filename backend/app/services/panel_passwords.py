@@ -45,15 +45,7 @@ def issue_password_reset(session: Session, user: PanelUser) -> tuple[PanelPasswo
     landing would leave an account nobody can get into.
     """
     now = utcnow()
-    outstanding = session.execute(
-        select(PanelPasswordReset).where(
-            PanelPasswordReset.panel_user_id == user.id,
-            PanelPasswordReset.used_at.is_(None),
-            PanelPasswordReset.expires_at > now,
-        )
-    ).scalars()
-    for stale in outstanding:
-        stale.expires_at = now
+    _invalidate_outstanding_resets(session, user)
 
     token = new_token()
     reset = PanelPasswordReset(
@@ -70,6 +62,23 @@ def issue_password_reset(session: Session, user: PanelUser) -> tuple[PanelPasswo
     session.flush()
     return reset, token
 
+def _invalidate_outstanding_resets(session: Session, user: PanelUser) -> None:
+    """Consume every reset token still live for this account.
+
+    Marks `used_at` rather than pulling `expires_at` back to now: a token
+    superseded this way reads in the audit trail as spent by something else,
+    not as merely expired and never touched.
+    """
+    now = utcnow()
+    outstanding = session.execute(
+        select(PanelPasswordReset).where(
+            PanelPasswordReset.panel_user_id == user.id,
+            PanelPasswordReset.used_at.is_(None),
+            PanelPasswordReset.expires_at > now,
+        )
+    ).scalars()
+    for stale in outstanding:
+        stale.used_at = now
 
 def set_password_with_token(session: Session, *, token: str, new_password: str) -> PanelUser:
     """Spend a reset token and set the account's password.
@@ -124,4 +133,5 @@ def change_password(
 
     user.password_hash = hash_password(new_password)
     revoke_all_sessions(session, user, except_session_id=keep_session_id)
+    _invalidate_outstanding_resets(session, user)
     session.commit()

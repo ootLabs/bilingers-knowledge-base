@@ -407,6 +407,38 @@ class TestPasswordReset:
         )
         assert response.status_code == 400
 
+    def test_a_superseded_token_is_marked_used_not_merely_expired(
+        self, panel_editor: PanelUser, panel_db: Session
+    ) -> None:
+        """A token that shows up twice must be visible as spent, not
+        indistinguishable from one nobody ever touched."""
+        first_reset, _ = issue_password_reset(panel_db, panel_editor)
+        issue_password_reset(panel_db, panel_editor)
+        panel_db.flush()
+
+        assert first_reset.used_at is not None
+
+    def test_changing_your_password_invalidates_a_live_reset_token(
+        self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session
+    ) -> None:
+        """A reset token handed out before the change must not survive it."""
+        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
+        _, reset_token = issue_password_reset(panel_db, panel_editor)
+        panel_db.flush()
+
+        changed = panel_client.post(
+            "/api/panel/users/me/password",
+            json={"current_password": EDITOR_PASSWORD, "new_password": NEW_PASSWORD},
+            headers=auth_header(token),
+        )
+        assert changed.status_code == 204
+
+        confirm = panel_client.post(
+            "/api/panel/password-resets/confirm",
+            json={"token": reset_token, "new_password": "jeszcze-inne-haslo"},
+        )
+        assert confirm.status_code == 400
+
     def test_spending_a_token_ends_every_session_of_that_account(
         self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session
     ) -> None:
