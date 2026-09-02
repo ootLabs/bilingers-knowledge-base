@@ -52,7 +52,7 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, logging. No `sqlalchemy.url` on purpose |
 | `backend/alembic/env.py` | Reads `DATABASE_URL` via `app.config`, sets `target_metadata` from `app.models.Base` |
 | `backend/alembic/versions/0001_core_data_model.py` | First revision: the five tables, the `knowledge_gap_status` enum, indexes and constraints |
-| `backend/alembic/versions/0002_panel_authentication.py` | Panel accounts: `panel_users`, `panel_sessions`, `panel_login_attempts`, `panel_password_resets`, the `panel_user_role` enum |
+| `backend/alembic/versions/6059ee904da3_panel_authentication.py` | Panel accounts: `panel_users`, `panel_sessions`, `panel_login_attempts`, `panel_password_resets`, the `panel_user_role` enum. Non-numeric revision id: `feat/cost-ledger` also branched from `0001` and claimed `"0002"` first |
 
 ## Tests
 
