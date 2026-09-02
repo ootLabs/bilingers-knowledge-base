@@ -28,7 +28,7 @@ Everyday commands live in [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), test
 - `frontend` mounts the host directory but keeps the image's `node_modules` and `.next` as anonymous volumes. Changing `package.json` needs a rebuild, not a restart.
 - No `package-lock.json` exists, so the image uses `npm install`. Builds are not reproducible until a lockfile is committed.
 - `PRICING_FILE` points **inside** the backend container (`/app/pricing.json`), which the `./backend` mount maps to `backend/pricing.json` on the host. It is gitignored and absent on a fresh clone: nothing reads it until a model is actually called, and when something does, a missing file is an error naming the example to copy rather than a silent cost of zero.
-- Editing the price list needs neither a restart nor a rebuild. `app.services.pricing` re-reads it when its mtime or size changes, and a broken edit fails the next request loudly instead of quietly serving the list it replaced.
+- Editing the price list needs neither a restart nor a rebuild. `app.services.pricing` reads the file on every call and re-parses it when the contents change, deliberately not trusting `stat()`, and a broken edit fails the next request loudly instead of quietly serving the list it replaced.
 
 ## Where new things go
 

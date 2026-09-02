@@ -31,7 +31,6 @@ from app.services.chat import (
 _VALID_TOKEN = "a" * 32
 
 
-
 class TestValidation:
     """These never reach the service layer: Pydantic rejects the body first."""
 

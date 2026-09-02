@@ -29,7 +29,6 @@ from app.services.usage import (
     UsageNotRecorded,
     price_usage,
     record_usage,
-    record_usage,
 )
 
 PRICES = PriceList(
@@ -154,9 +153,6 @@ class LedgerSession:
 
     def rollback(self) -> None:
         self.rolled_back = True
-
-    def execute_scalar(self) -> object | None:
-        return self._row
 
     def close(self) -> None:
         self.closed = True

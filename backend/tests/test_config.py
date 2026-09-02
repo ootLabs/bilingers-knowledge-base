@@ -51,10 +51,22 @@ def test_defaults_are_usable_without_any_environment() -> None:
     assert settings.cors_origin_list
 
 
-def test_the_price_list_path_defaults_inside_the_container() -> None:
+def test_the_price_list_path_defaults_inside_the_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Same reasoning as the `db` host in `database_url`: the backend reads this
-    path from inside its own container, where the mount puts the file at /app."""
-    assert Settings().pricing_file == "/app/pricing.json"
+    path from inside its own container, where the mount puts the file at /app.
+
+    The environment is cleared first, because this is about the default in the
+    code and nothing else. `docker-compose.yml` sets `PRICING_FILE`, so a plain
+    `Settings()` would read that instead, and anyone doing what `infra.md`
+    suggests (their own price list path in `.env`) would get a red test with
+    nothing broken. The test above deliberately checks only a prefix for the
+    same reason.
+    """
+    monkeypatch.delenv("PRICING_FILE", raising=False)
+
+    assert Settings(_env_file=None).pricing_file == "/app/pricing.json"
 
 
 def test_the_price_list_path_is_configurable() -> None:

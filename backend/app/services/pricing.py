@@ -37,6 +37,14 @@ MAX_VERSION_LENGTH = 50
 # else would silently produce a wrong PLN figure. Rejected rather than guessed.
 SUPPORTED_CURRENCY = "USD"
 
+# Far above any provider price per million tokens or any plausible exchange
+# rate, and far below the point where arithmetic on the value stops working: a
+# figure like "1e30" passes every other check here and then raises a bare
+# `decimal.InvalidOperation` out of the quantize step in `app.services.usage`,
+# which is neither of the two errors this module promises. A ceiling keeps that
+# mistake where the operator can see the file and the message.
+MAX_AMOUNT = Decimal(1_000_000)
+
 
 class PricingConfigError(Exception):
     """The price list is missing, unreadable, or malformed.
@@ -121,6 +129,8 @@ def _require_decimal(value: Any, field: str, *, positive: bool = False) -> Decim
         raise PricingConfigError(f"{field} must be a finite, non-negative number")
     if positive and amount == 0:
         raise PricingConfigError(f"{field} must be greater than zero")
+    if amount > MAX_AMOUNT:
+        raise PricingConfigError(f"{field} must not exceed {MAX_AMOUNT}")
     return amount
 
 
@@ -134,6 +144,17 @@ def _parse_models(raw: Any) -> dict[str, ModelPrice]:
     models: dict[str, ModelPrice] = {}
     for name, entry in models_raw.items():
         model = _require_text(name, "a model name", MAX_MODEL_NAME_LENGTH)
+        if model in models:
+            # JSON keeps "gpt-x" and "gpt-x " apart; `_require_text` strips, so
+            # they arrive here as one name and the second entry would quietly
+            # win. That is the worst failure this file can have: a tier pasted
+            # in with a trailing space silently reprices every question at
+            # another tier's rate, with no error anywhere and a file that looks
+            # correct to the eye. Refused, so the operator sees it immediately.
+            raise PricingConfigError(
+                f"models has more than one entry for {model!r}; two keys "
+                "differing only in surrounding whitespace are the same model"
+            )
         fields = _require_mapping(entry, f"models[{model!r}]")
         models[model] = ModelPrice(
             input_per_million=_require_decimal(

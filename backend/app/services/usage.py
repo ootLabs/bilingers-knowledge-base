@@ -13,12 +13,13 @@ real `TokenUsage`, and the call site they need is `record_usage`.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models.chat import Query
@@ -150,7 +151,7 @@ def record_usage(
     query_id: int,
     priced: PricedUsage,
     *,
-    session_factory: sessionmaker[Session] = SessionLocal,
+    session_factory: Callable[[], Session] = SessionLocal,
 ) -> None:
     """Complete a ledger row with what answering it cost, in its own transaction.
 

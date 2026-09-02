@@ -79,11 +79,44 @@ def test_unknown_model_is_an_error_not_a_free_call() -> None:
         pytest.param({"models": {"small": "0.15"}}, id="model entry that is not an object"),
         pytest.param({"models": {"s": {"input_per_million": "1"}}}, id="missing output price"),
         pytest.param({"models": {"m" * 101: {}}}, id="model name longer than the column"),
+        pytest.param({"fx_rate_pln_per_usd": "1e30"}, id="rate beyond any sane magnitude"),
     ],
 )
 def test_refuses_a_malformed_price_list(mutation: dict[str, object]) -> None:
     with pytest.raises(PricingConfigError):
         parse_price_list({**VALID, **mutation})
+
+
+def test_two_names_differing_only_in_whitespace_are_refused() -> None:
+    """The worst failure this file can have, so it is the one pinned hardest.
+
+    JSON keeps "gpt-x" and "gpt-x " apart, and the parser strips, so without
+    this guard they collapse into one model and the second entry wins. A tier
+    pasted in with a trailing space would silently reprice every question at
+    another tier's rate: here that is 0.15 turning into 3.00, a twentyfold
+    overstatement of the bill, with no error and a file that looks right.
+    """
+    collided = {
+        **VALID,
+        "models": {
+            "gpt-x": {"input_per_million": "0.15", "output_per_million": "0.60"},
+            "gpt-x ": {"input_per_million": "3.00", "output_per_million": "15.00"},
+        },
+    }
+
+    with pytest.raises(PricingConfigError, match="more than one entry"):
+        parse_price_list(collided)
+
+
+def test_an_absurd_magnitude_is_a_config_error_not_a_later_crash() -> None:
+    """`1e30` passes every other check, then raises a bare
+    `decimal.InvalidOperation` out of the quantize step once something is
+    actually priced, which is neither error this module documents. The ceiling
+    keeps the failure where the operator can see the file and the message."""
+    with pytest.raises(PricingConfigError, match="must not exceed"):
+        parse_price_list(
+            {**VALID, "models": {"m": {"input_per_million": "1e30", "output_per_million": "0"}}}
+        )
 
 
 def test_a_price_of_zero_is_allowed_but_a_rate_of_zero_is_not() -> None:

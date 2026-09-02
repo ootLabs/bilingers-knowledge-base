@@ -54,6 +54,9 @@ LEFT JOIN chat_sessions s ON s.id = q.chat_session_id
 """
 
 # The month total, which is the number D11 asks the foundation to approve.
+# Deliberately unordered: an ORDER BY inside a view is not carried into the
+# query that selects from it, so having one here would only look like a
+# guarantee. Every consumer orders for itself.
 # `query_count` and `priced_query_count` are both reported on purpose: the gap
 # between them is the traffic that never reached a model (off topic, over quota,
 # or today's placeholder), and a report that hid it would look like a month with
@@ -70,7 +73,6 @@ SELECT
     coalesce(sum(cost_pln), 0)::numeric(14, 6) AS cost_pln
 FROM query_costs
 GROUP BY report_month
-ORDER BY report_month
 """
 
 

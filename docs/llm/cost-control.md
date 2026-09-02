@@ -64,7 +64,7 @@ Prices are not in the code and must never be. They live in a JSON file whose pat
 Four properties, each of which was a decision:
 
 - **Amounts are strings**, parsed as `Decimal`. A JSON float reintroduces binary rounding into a figure the foundation signs off on.
-- **An edit needs no deploy and no restart.** The file is re-read when its mtime or size changes.
+- **An edit needs no deploy and no restart.** The file is read on every call and the cache is keyed by its contents, not by `stat()`. Timestamps are not trustworthy here: a bind mount or a network filesystem may report mtime only to the whole second, so a same-second edit that kept the byte count identical would be invisible.
 - **A broken edit fails loudly** on the next request instead of falling back to the list it replaced. Quietly pricing traffic with superseded numbers corrupts the ledger for as long as nobody looks; a typo that breaks the next request gets found in seconds.
 - **A model with no price is an error**, not a free call. Costing it at zero would understate exactly the report the foundation reads.
 

@@ -35,7 +35,10 @@ DB_SERVICE = os.environ.get("DB_SERVICE", "db")
 # a grouping that disagree would report a month the report itself cannot show.
 REPORT_TIMEZONE = "Europe/Warsaw"
 
-MONTHLY = "SELECT * FROM query_costs_monthly"
+# Ordered here, not in the view: PostgreSQL does not carry a view's ORDER BY
+# into the query that selects from it, so months could print out of sequence
+# and read as a data problem.
+MONTHLY = "SELECT * FROM query_costs_monthly ORDER BY report_month"
 
 # `count(*)` next to `count(cost_pln)` in every section, because the difference
 # is the traffic that never reached a model. Hiding it would make a month of
@@ -203,10 +206,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # Before any output. A bad --month used to be reported after the monthly
+    # table had already printed, leaving the operator unsure whether the numbers
+    # above it were the ones they asked for.
+    requested = month_filter(args.month)
+
     if args.csv:
         # Straight to stdout, so it pipes into a file without the headings.
-        where = month_filter(args.month)
-        sys.stdout.write(psql(PER_QUERY_CSV.format(where=where), csv=True))
+        sys.stdout.write(psql(PER_QUERY_CSV.format(where=requested), csv=True))
         return 0
 
     section("Cost per month, all traffic", MONTHLY)
