@@ -14,9 +14,10 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/app/routers/chat.py` | `POST /chat` - streams an answer; writes the `Query` row before streaming starts, translates `InvalidChatInput` to `422` and `ChatServiceUnavailable` to `503` |
 | `backend/app/routers/panel_auth.py` | `POST /api/panel/sessions` (login), `DELETE /api/panel/sessions/current`, `GET /api/panel/users/me`, `POST /api/panel/users/me/password`, `POST /api/panel/password-resets/confirm` |
 | `backend/app/routers/panel_users.py` | Administrator only: list, create, `PATCH` role/activity, `POST .../password-resets` under `/api/panel/users` |
-| `backend/app/services/panel_auth.py` | `login`, `resolve_session`, `revoke_session`, `revoke_all_sessions`, `LoginFailure`, `AuthenticationFailed`, `AccountLocked`, `normalise_email`, `as_utc` - lockout and the login audit |
+| `backend/app/services/panel_auth.py` | `login`, `resolve_session`, `revoke_session`, `revoke_all_sessions`, `find_by_email`, `LoginFailure`, `AuthenticationFailed`, `normalise_email`, `as_utc` - lockout and the login audit; every refusal (unknown, wrong password, locked, deactivated) is the same exception and the same timing |
+| `backend/app/services/rate_limit.py` | `check`, `reset`, `TooManyAttempts` - in-process sliding-window throttle for login attempts by IP address, ahead of the per-account lockout |
 | `backend/app/services/panel_passwords.py` | `issue_password_reset`, `set_password_with_token`, `change_password`, `InvalidPasswordResetToken` |
-| `backend/app/services/panel_users.py` | `create_panel_user`, `list_panel_users`, `update_panel_user`, `reset_password_for`, `EmailAlreadyUsed`, `PanelUserNotFound`, `SelfManagementRefused` |
+| `backend/app/services/panel_users.py` | `create_panel_user`, `list_panel_users`, `update_panel_user`, `reset_password_for`, `EmailAlreadyUsed`, `PanelUserNotFound`, `PanelUserInactive`, `SelfManagementRefused` |
 | `backend/app/services/chat.py` | `get_or_create_chat_session`, `record_query`, `stream_placeholder_answer`, `ChatServiceUnavailable`, `InvalidChatInput` - the streaming pipe from T-12, no RAG/model call yet |
 | `backend/app/schemas/panel.py` | `PanelLoginRequest`, `PanelSessionResponse`, `PanelUserResponse`, `PanelUserCreateRequest`, `PanelUserUpdateRequest`, `PasswordResetResponse`, `PasswordResetConfirmRequest`, `PasswordChangeRequest`; password length rules live here |
 | `backend/app/schemas/chat.py` | `ChatRequest` (`question`, `session_token`); rejects blank/oversized input |
@@ -66,8 +67,13 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/tests/test_app.py` | Root route, OpenAPI schema, CORS headers, route uniqueness, `get_session` lifecycle |
 | `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, plus integration round trips against real PostgreSQL |
 | `backend/tests/test_security.py` | Hashing and tokens: salting, the missing-hash case, the bcrypt byte limit |
-| `backend/tests/test_panel_auth.py` | Login, the lockout, session lifetime, password resets and changes, plus a PostgreSQL class for the migrated schema and the unique constraint |
-| `backend/tests/test_panel_users.py` | Who may manage accounts, creating one and setting its first password, self-lockout refusal, administrator-issued resets, the bootstrap command |
+| `backend/tests/test_panel_auth.py` | Login input rules, credentials, the lockout, the per-IP throttle |
+| `backend/tests/test_panel_sessions.py` | Session lifetime, plus a PostgreSQL class for the migrated schema and the unique constraint |
+| `backend/tests/test_panel_passwords.py` | Password resets and changing your own password |
+| `backend/tests/test_panel_users.py` | Who may create accounts, creating one and setting its first password |
+| `backend/tests/test_panel_user_management.py` | Role/activity changes, self-lockout refusal, administrator-issued resets |
+| `backend/tests/test_cli.py` | `python -m app.cli create-admin` - the bootstrap command |
+| `backend/tests/test_rate_limit.py` | The per-IP login throttle: the sliding window, and that stale keys are swept instead of growing the dict forever |
 | `backend/tests/test_chat.py` | Validation, the write-before-stream order, `SQLAlchemyError` to `503`, plus integration tests proving real persistence and session reuse |
 
 ## Where new things go

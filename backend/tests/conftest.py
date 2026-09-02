@@ -19,6 +19,7 @@ from app.db import engine, get_session
 from app.main import app
 from app.models import Base
 from app.models.panel import PanelRole, PanelUser
+from app.services import rate_limit
 
 # Long enough for the panel's own rule (12 characters), and obviously fake.
 ADMIN_PASSWORD = "administrator-haslo"
@@ -152,6 +153,11 @@ def panel_db() -> Iterator[Session]:
 def panel_client(panel_db: Session) -> Iterator[TestClient]:
     """Client backed by `panel_db`, reaching the real routers and services."""
     app.dependency_overrides[get_session] = lambda: panel_db
+    # The IP rate limiter is process-global (see `app.services.rate_limit`),
+    # not per-test like `panel_db`: without this, attempts from one test's
+    # client would count against the next one's, all sharing the same
+    # synthetic TestClient address.
+    rate_limit.reset()
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -166,6 +172,7 @@ def postgres_panel_client(
     it actually runs on: the migrated schema, the real driver, real constraints.
     """
     app.dependency_overrides[get_session] = lambda: db_session
+    rate_limit.reset()
     yield TestClient(app)
     app.dependency_overrides.clear()
 

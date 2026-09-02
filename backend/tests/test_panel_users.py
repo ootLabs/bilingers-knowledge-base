@@ -1,19 +1,22 @@
-"""Account management: the administrator's half of the panel.
+"""Account management: who may create accounts, and creating one.
 
 The rules worth testing here are the ones that are easy to get wrong and
-expensive when they are: an editor must not be able to create accounts, a
-deactivated account must lose access immediately rather than when its session
-happens to expire, and an administrator must not be able to lock themselves
-out of a panel that has no other way in.
+expensive when they are: an editor must not be able to create accounts, and a
+duplicate or malformed address must be refused without discarding other
+pending work.
+
+Changing an existing account (role, activity, administrator-issued resets)
+lives in `test_panel_user_management.py`; `python -m app.cli create-admin` is
+a different module and lives in `test_cli.py`.
 """
 
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import cli
 from app.models.panel import PanelRole, PanelUser
 from app.schemas.panel import PanelUserUpdateRequest
 from app.services.panel_users import EmailAlreadyUsed, create_panel_user
@@ -143,6 +146,65 @@ class TestCreatingAnAccount:
         assert response.status_code == 409
         assert response.json()["detail"] == "email_already_used"
 
+    def test_a_different_constraint_violation_is_not_reported_as_a_duplicate_address(
+        self, panel_db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only the email uniqueness constraint should translate to
+        `EmailAlreadyUsed`; anything else about the insert must propagate as
+        itself, or an administrator would be told about a duplicate address
+        that does not exist."""
+
+        def _boom() -> None:
+            raise IntegrityError(
+                "INSERT", {}, Exception("NOT NULL constraint failed: panel_users.role")
+            )
+
+        monkeypatch.setattr(panel_db, "flush", _boom)
+
+        with pytest.raises(IntegrityError):
+            create_panel_user(panel_db, email="ktos@fundacja.test", role=PanelRole.EDITOR)
+
+    def test_a_named_constraint_violation_is_matched_by_name_not_by_substring(
+        self, panel_db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On PostgreSQL the driver exposes the constraint name directly; a
+        future constraint whose name happens to mention "email" must not be
+        misread as the uniqueness one just because the word appears."""
+
+        class _FakeDiag:
+            constraint_name = "panel_users_email_verified_check"
+
+        class _FakeOrig(Exception):
+            diag = _FakeDiag()
+
+        def _boom() -> None:
+            raise IntegrityError("INSERT", {}, _FakeOrig("some unrelated email constraint"))
+
+        monkeypatch.setattr(panel_db, "flush", _boom)
+
+        with pytest.raises(IntegrityError):
+            create_panel_user(panel_db, email="ktos@fundacja.test", role=PanelRole.EDITOR)
+
+    def test_the_named_email_uniqueness_constraint_is_still_recognised(
+        self, panel_db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The happy path for the named-constraint check: the real PostgreSQL
+        constraint name still maps to `EmailAlreadyUsed`."""
+
+        class _FakeDiag:
+            constraint_name = "panel_users_email_key"
+
+        class _FakeOrig(Exception):
+            diag = _FakeDiag()
+
+        def _boom() -> None:
+            raise IntegrityError("INSERT", {}, _FakeOrig("duplicate key value"))
+
+        monkeypatch.setattr(panel_db, "flush", _boom)
+
+        with pytest.raises(EmailAlreadyUsed):
+            create_panel_user(panel_db, email="ktos@fundacja.test", role=PanelRole.EDITOR)
+
     def test_a_malformed_address_is_refused(
         self, panel_client: TestClient, panel_admin: PanelUser
     ) -> None:
@@ -162,197 +224,3 @@ class TestCreatingAnAccount:
         assert {row["email"] for row in listed} >= {panel_admin.email, panel_editor.email}
         assert all("password_hash" not in row for row in listed)
 
-
-class TestChangingAnAccount:
-    def test_a_role_can_be_changed(
-        self, panel_client: TestClient, panel_admin: PanelUser, panel_editor: PanelUser
-    ) -> None:
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.patch(
-            f"/api/panel/users/{panel_editor.id}",
-            headers=auth_header(token),
-            json={"role": "admin"},
-        )
-        assert response.status_code == 200
-        assert response.json()["role"] == "admin"
-
-    def test_deactivating_an_account_ends_its_sessions_at_once(
-        self, panel_client: TestClient, panel_admin: PanelUser, panel_editor: PanelUser
-    ) -> None:
-        """An account that keeps working after being switched off has not been
-        switched off."""
-        editor_token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        admin_token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-
-        panel_client.patch(
-            f"/api/panel/users/{panel_editor.id}",
-            headers=auth_header(admin_token),
-            json={"is_active": False},
-        )
-        assert panel_client.get(
-            "/api/panel/users/me", headers=auth_header(editor_token)
-        ).status_code == 401
-
-    def test_an_administrator_cannot_deactivate_themselves(
-        self, panel_client: TestClient, panel_admin: PanelUser
-    ) -> None:
-        """With one or two administrators, this is the difference between a
-        misclick and a panel nobody can administer."""
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.patch(
-            f"/api/panel/users/{panel_admin.id}",
-            headers=auth_header(token),
-            json={"is_active": False},
-        )
-        assert response.status_code == 403
-        assert response.json()["detail"] == "self_lockout_refused"
-        assert panel_admin.is_active is True
-
-    def test_an_administrator_cannot_demote_themselves(
-        self, panel_client: TestClient, panel_admin: PanelUser
-    ) -> None:
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.patch(
-            f"/api/panel/users/{panel_admin.id}",
-            headers=auth_header(token),
-            json={"role": "editor"},
-        )
-        assert response.status_code == 403
-        assert panel_admin.role is PanelRole.ADMIN
-
-    def test_an_administrator_may_still_edit_their_own_account_harmlessly(
-        self, panel_client: TestClient, panel_admin: PanelUser
-    ) -> None:
-        """Only the two changes that lock the panel are refused, not every self-edit."""
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.patch(
-            f"/api/panel/users/{panel_admin.id}",
-            headers=auth_header(token),
-            json={"role": "admin", "is_active": True},
-        )
-        assert response.status_code == 200
-
-    def test_an_unknown_account_is_a_404(
-        self, panel_client: TestClient, panel_admin: PanelUser
-    ) -> None:
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.patch(
-            "/api/panel/users/999999",
-            headers=auth_header(token),
-            json={"is_active": False},
-        )
-        assert response.status_code == 404
-        assert response.json()["detail"] == "panel_user_not_found"
-
-
-class TestAdministratorIssuedResets:
-    def test_an_administrator_can_issue_a_reset_token(
-        self, panel_client: TestClient, panel_admin: PanelUser, panel_editor: PanelUser
-    ) -> None:
-        """There is no mail path yet, so the token comes back in the response
-        and the administrator hands it over."""
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.post(
-            f"/api/panel/users/{panel_editor.id}/password-resets",
-            headers=auth_header(token),
-        )
-        assert response.status_code == 201
-        assert response.json()["token"]
-
-    def test_issuing_a_reset_does_not_throw_the_person_out(
-        self, panel_client: TestClient, panel_admin: PanelUser, panel_editor: PanelUser
-    ) -> None:
-        """A token is not proof anything is wrong; sessions end when it is spent."""
-        editor_token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        admin_token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-
-        panel_client.post(
-            f"/api/panel/users/{panel_editor.id}/password-resets",
-            headers=auth_header(admin_token),
-        )
-        assert panel_client.get(
-            "/api/panel/users/me", headers=auth_header(editor_token)
-        ).status_code == 200
-
-    def test_an_issued_reset_can_be_spent(
-        self, panel_client: TestClient, panel_admin: PanelUser, panel_editor: PanelUser
-    ) -> None:
-        admin_token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        issued = panel_client.post(
-            f"/api/panel/users/{panel_editor.id}/password-resets",
-            headers=auth_header(admin_token),
-        ).json()
-
-        assert panel_client.post(
-            "/api/panel/password-resets/confirm",
-            json={"token": issued["token"], "new_password": NEW_PASSWORD},
-        ).status_code == 204
-        assert log_in(panel_client, panel_editor.email, NEW_PASSWORD)
-
-    def test_a_reset_for_an_unknown_account_is_a_404(
-        self, panel_client: TestClient, panel_admin: PanelUser
-    ) -> None:
-        token = log_in(panel_client, panel_admin.email, ADMIN_PASSWORD)
-        response = panel_client.post(
-            "/api/panel/users/999999/password-resets", headers=auth_header(token)
-        )
-        assert response.status_code == 404
-
-    def test_an_editor_cannot_issue_a_reset_for_somebody_else(
-        self, panel_client: TestClient, panel_editor: PanelUser, panel_admin: PanelUser
-    ) -> None:
-        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        response = panel_client.post(
-            f"/api/panel/users/{panel_admin.id}/password-resets", headers=auth_header(token)
-        )
-        assert response.status_code == 403
-
-
-class TestBootstrapCommand:
-    """`python -m app.cli create-admin` is how the first account exists at all.
-
-    Runs on `panel_db` like the rest: asking for `migrated_database` here would
-    skip the only path to the first administrator in exactly the run that has
-    no database, which is the run this suite exists to stay useful in.
-    """
-
-    def test_it_creates_an_administrator_and_prints_a_token(
-        self,
-        cheap_password_hashing: None,
-        panel_db: Session,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        assert cli.main(["create-admin", "pierwsza@fundacja.test"], lambda: panel_db) == 0
-
-        printed = capsys.readouterr().out
-        assert "pierwsza@fundacja.test" in printed
-        assert "One-time setup token:" in printed
-
-    def test_the_account_it_creates_is_an_administrator_with_no_password(
-        self,
-        cheap_password_hashing: None,
-        panel_db: Session,
-        panel_client: TestClient,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        cli.main(["create-admin", "pierwsza@fundacja.test"], lambda: panel_db)
-        token = capsys.readouterr().out.split("One-time setup token: ")[1].split("\n")[0]
-
-        assert panel_client.post(
-            "/api/panel/password-resets/confirm",
-            json={"token": token, "new_password": NEW_PASSWORD},
-        ).status_code == 204
-
-        session_token = log_in(panel_client, "pierwsza@fundacja.test", NEW_PASSWORD)
-        me = panel_client.get("/api/panel/users/me", headers=auth_header(session_token)).json()
-        assert me["role"] == "admin"
-
-    def test_it_refuses_to_create_a_second_account_for_one_address(
-        self,
-        cheap_password_hashing: None,
-        panel_db: Session,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        make_panel_user(panel_db, email="pierwsza@fundacja.test", password=None)
-        assert cli.main(["create-admin", "pierwsza@fundacja.test"], lambda: panel_db) == 1
-        assert "already exists" in capsys.readouterr().out
