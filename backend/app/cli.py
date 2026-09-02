@@ -18,14 +18,27 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models.panel import PanelRole
+from app.schemas.panel import Email
 from app.services.panel_users import EmailAlreadyUsed, create_panel_user
+
+_EMAIL_ADAPTER: TypeAdapter[str] = TypeAdapter(Email)
 
 
 def _create_admin(session: Session, email: str) -> int:
+    # The HTTP layer gets this for free from `PanelLoginRequest`/schemas; a CLI
+    # argument has no such gate, and this is the only way the first
+    # administrator ever gets created, so a typo here is otherwise permanent.
+    try:
+        _EMAIL_ADAPTER.validate_python(email)
+    except ValidationError:
+        print(f"'{email}' is not a valid email address.")
+        return 1
+
     try:
         user, _, token = create_panel_user(session, email=email, role=PanelRole.ADMIN)
     except EmailAlreadyUsed:

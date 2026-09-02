@@ -21,6 +21,7 @@ from app.schemas.panel import (
 )
 from app.services.panel_users import (
     EmailAlreadyUsed,
+    PanelUserInactive,
     PanelUserNotFound,
     SelfManagementRefused,
     create_panel_user,
@@ -109,7 +110,10 @@ def update_user(
     "/{user_id}/password-resets",
     response_model=PasswordResetResponse,
     status_code=201,
-    responses={404: {"description": "No account with that id."}},
+    responses={
+        404: {"description": "No account with that id."},
+        409: {"description": "The account is deactivated."},
+    },
 )
 def issue_reset(
     user_id: int,
@@ -126,6 +130,8 @@ def issue_reset(
         user, reset, token = reset_password_for(session, user_id)
     except PanelUserNotFound as error:
         raise HTTPException(status_code=404, detail="panel_user_not_found") from error
+    except PanelUserInactive as error:
+        raise HTTPException(status_code=409, detail="panel_user_inactive") from error
 
     return PasswordResetResponse(
         user=PanelUserResponse.model_validate(user),

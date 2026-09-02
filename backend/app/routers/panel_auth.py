@@ -11,6 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_session
 from app.dependencies import current_panel_session
 from app.models.panel import PanelSession, PanelUser
@@ -22,23 +23,19 @@ from app.schemas.panel import (
     PasswordResetConfirmRequest,
 )
 from app.services.panel_auth import (
-    AccountLocked,
     AuthenticationFailed,
     login,
     revoke_session,
-    utcnow,
 )
 from app.services.panel_passwords import (
     InvalidPasswordResetToken,
     change_password,
     set_password_with_token,
 )
+from app.services.rate_limit import TooManyAttempts
+from app.services.rate_limit import check as check_ip_rate_limit
 
 router = APIRouter(prefix="/api/panel", tags=["panel"])
-
-# Truncated to what the column holds. A user agent longer than this is either a
-# bloated real one or someone probing, and neither is worth a 500.
-_USER_AGENT_LIMIT = 255
 
 
 def _client_ip(request: Request) -> str | None:
@@ -57,7 +54,7 @@ def _client_ip(request: Request) -> str | None:
     status_code=201,
     responses={
         401: {"description": "Wrong credentials, or the account cannot log in."},
-        423: {"description": "Too many failed attempts; the account is locked."},
+        429: {"description": "Too many attempts from this address."},
     },
 )
 def open_session(
@@ -67,28 +64,39 @@ def open_session(
 ) -> PanelSessionResponse:
     """Log in. The response carries the session token exactly once.
 
-    A locked account gets 423 rather than the generic 401: with a handful of
-    named accounts there is nothing to hide, and an editor who cannot get in
-    needs to know whether to wait or to call the administrator.
+    A locked, deactivated or nonexistent account all answer with the same
+    401: a distinct status for a locked account would tell an anonymous
+    caller which addresses have one, and answering faster than a wrong
+    password would tell them the same thing by timing alone.
+
+    Checked before any of that: how many attempts this address has made
+    recently. `login` pays for a bcrypt comparison on every call, including
+    for an unknown account, precisely so it cannot be used to fingerprint
+    addresses; the IP throttle is what stops that cost being spent on a flood.
     """
+    ip = _client_ip(request)
+    if ip is not None:
+        try:
+            check_ip_rate_limit(
+                ip,
+                max_attempts=settings.panel_login_ip_max_attempts,
+                window_minutes=settings.panel_login_ip_window_minutes,
+            )
+        except TooManyAttempts as error:
+            raise HTTPException(
+                status_code=429,
+                detail="too_many_requests",
+                headers={"Retry-After": str(error.retry_after_seconds)},
+            ) from error
+
     try:
         panel_session, token = login(
             session,
             email=payload.email,
             password=payload.password,
             ip_address=_client_ip(request),
-            user_agent=request.headers.get("user-agent", "")[:_USER_AGENT_LIMIT] or None,
+            user_agent=request.headers.get("user-agent") or None,
         )
-    except AccountLocked as error:
-        # Seconds to wait, per RFC 9110, not the moment the lock lifts: a
-        # timestamp here reads as a delay of decades to anything that honours
-        # the header, and the client would back off effectively forever.
-        retry_after = max(1, int((error.locked_until - utcnow()).total_seconds()))
-        raise HTTPException(
-            status_code=423,
-            detail="account_locked",
-            headers={"Retry-After": str(retry_after)},
-        ) from error
     except AuthenticationFailed as error:
         raise HTTPException(status_code=401, detail="invalid_credentials") from error
 

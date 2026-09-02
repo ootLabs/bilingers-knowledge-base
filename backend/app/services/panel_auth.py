@@ -10,9 +10,11 @@ Two rules shape most of the code here:
   that match no account. A panel with five accounts under an NDA has to be able
   to answer "who tried" as well as "who got in" (and T-89 builds on this row).
 * A failure tells the caller as little as possible. Wrong password, unknown
-  address and an account that never set one are one answer with one timing.
-  The single exception is a locked account, which says so: with five known
-  users, hiding it only confuses the person who is locked out.
+  address, a locked account and one that was switched off are one answer with
+  one timing: a caller who could tell them apart could enumerate which
+  addresses have an account at all. Whether an account is locked is still
+  visible, just not over HTTP - it is in `panel_login_attempts.reason` for
+  whoever administers the panel.
 """
 
 from __future__ import annotations
@@ -46,14 +48,6 @@ class AuthenticationFailed(Exception):
     """The credentials do not identify an account that may log in."""
 
 
-class AccountLocked(Exception):
-    """Too many failed attempts; the account is refusing logins for now."""
-
-    def __init__(self, locked_until: datetime) -> None:
-        super().__init__("account temporarily locked")
-        self.locked_until = locked_until
-
-
 def normalise_email(email: str) -> str:
     """Lowercase and strip, so one person cannot end up with two accounts.
 
@@ -80,6 +74,18 @@ def as_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
+_EMAIL_LIMIT = 320
+_IP_ADDRESS_LIMIT = 45
+_USER_AGENT_LIMIT = 255
+
+
+def _truncated(value: str | None, limit: int) -> str | None:
+    """Cut a value to what its column holds, keyed by this one function so a
+    limit only ever has to be gotten right in one place, not wherever a
+    caller happens to build the row."""
+    return value[:limit] if value else None
+
+
 def _record_attempt(
     session: Session,
     *,
@@ -96,12 +102,12 @@ def _record_attempt(
     # happens to trim the value on its way in.
     session.add(
         PanelLoginAttempt(
-            email=email[:320],
+            email=_truncated(email, _EMAIL_LIMIT),
             panel_user_id=user.id if user is not None else None,
             succeeded=succeeded,
             reason=reason,
-            ip_address=ip_address[:45] if ip_address else None,
-            user_agent=user_agent[:255] if user_agent else None,
+            ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
+            user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
         )
     )
 
@@ -115,14 +121,28 @@ def find_by_email(session: Session, email: str) -> PanelUser | None:
 def _register_failure(session: Session, user: PanelUser) -> None:
     """Count one failure against an account and lock it once the limit is hit.
 
+    Re-reads the row `FOR UPDATE` first: two concurrent bad-password attempts
+    against the same account must not both read the same `failed_login_count`
+    and lose one increment. Locked only for this short write, not for the
+    bcrypt comparison that already ran before the caller decided a failure
+    needs registering - holding the lock across ~250ms of CPU would serialise
+    concurrent *legitimate* logins on the same account for no reason.
+
+    The re-select returns the same object `user` already refers to (same
+    Session, same primary key, SQLAlchemy's identity map), so mutating it
+    here is exactly as visible to the caller as mutating `user` directly.
+
     The counter resets when the lock is applied rather than staying at the
     limit: after the lock expires the account gets a fresh run of attempts,
     instead of being locked again by the very next typo.
     """
-    user.failed_login_count += 1
-    if user.failed_login_count >= settings.panel_login_max_attempts:
-        user.locked_until = utcnow() + timedelta(minutes=settings.panel_login_lockout_minutes)
-        user.failed_login_count = 0
+    locked_row = session.execute(
+        select(PanelUser).where(PanelUser.id == user.id).with_for_update()
+    ).scalar_one()
+    locked_row.failed_login_count += 1
+    if locked_row.failed_login_count >= settings.panel_login_max_attempts:
+        locked_row.locked_until = utcnow() + timedelta(minutes=settings.panel_login_lockout_minutes)
+        locked_row.failed_login_count = 0
 
 
 def login(
@@ -146,10 +166,13 @@ def login(
     user = find_by_email(session, address)
     now = utcnow()
 
+    # Paid once, right here, no matter what turns out to be wrong with the
+    # account: a locked or deactivated account must not answer measurably
+    # faster than a wrong password, which is what makes every branch below
+    # safe to answer with the same 401.
+    password_ok = verify_password(password, user.password_hash if user else None)
+
     if user is None:
-        # Still pays for a password comparison, so a nonexistent account does
-        # not answer measurably faster than a real one.
-        verify_password(password, None)
         _record_attempt(
             session,
             email=address,
@@ -164,7 +187,10 @@ def login(
 
     if user.locked_until is not None and as_utc(user.locked_until) > now:
         # Deliberately does not extend the lock: an attacker hammering a locked
-        # account would otherwise keep the real owner out indefinitely.
+        # account would otherwise keep the real owner out indefinitely. The
+        # failure is the same generic one as a wrong password: a distinct
+        # status here would tell an anonymous caller which addresses have an
+        # account after a handful of requests.
         _record_attempt(
             session,
             email=address,
@@ -175,9 +201,9 @@ def login(
             user_agent=user_agent,
         )
         session.commit()
-        raise AccountLocked(as_utc(user.locked_until))
+        raise AuthenticationFailed("account temporarily locked")
 
-    if not verify_password(password, user.password_hash):
+    if not password_ok:
         _register_failure(session, user)
         _record_attempt(
             session,
@@ -197,8 +223,11 @@ def login(
 
     if not user.is_active:
         # Checked after the password on purpose: answering before it would let
-        # anyone probe which addresses have deactivated accounts for free.
-        _register_failure(session, user)
+        # anyone probe which addresses have deactivated accounts for free. Not
+        # counted as a failure: the password was right, so this is not
+        # evidence of guessing, and charging it against the lockout would
+        # leave a reactivated account still locked out on its own correct
+        # password.
         _record_attempt(
             session,
             email=address,
@@ -213,11 +242,11 @@ def login(
 
     token = new_token()
     panel_session = PanelSession(
-        panel_user_id=user.id,
+        panel_user=user,
         token_hash=hash_token(token),
         expires_at=now + timedelta(minutes=settings.panel_session_ttl_minutes),
-        ip_address=ip_address,
-        user_agent=user_agent[:255] if user_agent else None,
+        ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
+        user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
     )
     user.failed_login_count = 0
     user.locked_until = None

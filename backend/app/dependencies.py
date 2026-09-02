@@ -8,7 +8,7 @@ this module only adapts it to HTTP.
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,6 @@ def _unauthenticated() -> HTTPException:
 
 
 def current_panel_session(
-    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session: Session = Depends(get_session),
 ) -> tuple[PanelUser, PanelSession]:
@@ -52,9 +51,6 @@ def current_panel_session(
     if resolved is None:
         raise _unauthenticated()
 
-    # Stashed for handlers that need the session row itself (logout) without
-    # having to resolve the token a second time.
-    request.state.panel_session = resolved[1]
     return resolved
 
 

@@ -26,6 +26,16 @@ class PanelUserNotFound(Exception):
     """No account with that identifier."""
 
 
+class PanelUserInactive(Exception):
+    """The account is deactivated; it cannot receive a reset token.
+
+    A token issued anyway would come back to a caller that has no way to
+    know why: `set_password_with_token` refuses a deactivated account's token
+    with the same generic `invalid_reset_token` it gives an unknown or spent
+    one.
+    """
+
+
 class SelfManagementRefused(Exception):
     """An administrator tried to deactivate or demote their own account.
 
@@ -50,6 +60,23 @@ def create_panel_user(
             # the check-then-insert races, the constraint does not.
             session.flush()
     except IntegrityError as error:
+        # Narrowed to the constraint this insert can actually violate today:
+        # a future `CHECK` or `NOT NULL` on `panel_users` must surface as
+        # itself, not be reported to an administrator as a duplicate address
+        # that does not exist. On PostgreSQL this checks the actual constraint
+        # name (`panel_users_email_key`), not just whether "email" appears
+        # somewhere in the message, so an unrelated future constraint whose
+        # name happens to mention "email" cannot be misread as a duplicate
+        # address. Falls back to the substring match only when the driver
+        # does not expose a constraint name - the unit-test layer runs this
+        # same code against SQLite, whose message names the column but not a
+        # named constraint - see `docs/testing.md`.
+        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint_name is not None:
+            if constraint_name != "panel_users_email_key":
+                raise
+        elif "email" not in str(error.orig).lower():
+            raise
         raise EmailAlreadyUsed(email) from error
 
     reset, token = issue_password_reset(session, user)
@@ -114,6 +141,8 @@ def reset_password_for(
     who is working.
     """
     user = get_panel_user(session, user_id)
+    if not user.is_active:
+        raise PanelUserInactive(str(user_id))
     reset, token = issue_password_reset(session, user)
     session.commit()
     return user, reset, token
