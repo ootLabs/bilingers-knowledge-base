@@ -15,6 +15,7 @@ Target flow (most of it not built yet): the user opens the app → reads a short
 | Module | Responsibility | Path |
 |---|---|---|
 | Frontend | UI, conversation view, quiz screens (Polish copy) | `frontend/app/` |
+| Frontend API client | The only browser-to-backend call site, and the failure vocabulary every screen reacts to | `frontend/lib/api-client.ts` |
 | Backend API | HTTP layer, one router per domain | `backend/app/routers/` |
 | Backend config | Environment-driven settings | `backend/app/config.py` |
 | Persistence | SQLAlchemy engine + session dependency | `backend/app/db.py` |
@@ -36,6 +37,13 @@ browser → frontend (Next.js, :3000) → backend (FastAPI, :8000) → postgres 
 The frontend reaches the backend through `NEXT_PUBLIC_API_URL`, which must be a host-reachable URL because the browser makes the call. Backend → database uses `DATABASE_URL`, whose host is the compose service name `db`, resolvable only inside the compose network.
 
 `POST /chat` exists but is plumbing, not the AI layer: it writes the question to `queries`, then streams back a fixed placeholder string, chunk by chunk. No retrieval, no model call, no orchestration - see `docs/llm/README.md`'s non-negotiables. Planned addition, once the AI layer lands: retrieval and a real model call replace the placeholder, plus quota checks before either. Sketched in `docs/llm/retrieval.md` and `docs/llm/cost-control.md`.
+
+On the browser side the stream is consumed by `frontend/lib/api-client.ts` and rendered by
+`app/chat/ChatPanel.tsx`. Because the backend streams translation keys rather than prose, the
+frontend copy layer is what turns an answer into Polish; a key it cannot resolve is dropped
+rather than printed, and a stream in which nothing at all resolves becomes a failure rather
+than a blank reply. Every HTTP failure collapses into one of four `ChatFailure` values before
+any component sees it, and the body of a failed response is never read.
 
 ## Data model
 
@@ -91,6 +99,10 @@ The intended erasure model is **scrubbing marked columns rather than deleting ro
 | 2026-08-26 | `/chat` streams a fixed sequence of opaque placeholder chunks rather than calling a model | T-12 is explicitly the pipe, not the engine (no RAG, no orchestration, no guardrails yet); the `answer` column also cannot be set without a `knowledge_base_version_id`, which does not exist until ingestion (T-01) runs. Keys, not prose, so the placeholder does not itself violate "the backend returns data and keys, not sentences" while it is standing in for a real answer |
 | 2026-08-26 | `app.services.chat` raises `ChatServiceUnavailable` or `InvalidChatInput` instead of letting `SQLAlchemyError` reach the router | Sets the precedent for every future DB-backed router: `docs/conventions.md` requires services to raise domain exceptions and routers to translate them. The two exceptions map to different HTTP statuses (503 vs 422) because a bad connection and a rejected question are not the same failure and should not both cause a client to retry blindly |
 | 2026-08-26 | `ChatRequest.session_token` requires 32-64 lowercase hex characters | The token is the only key to a conversation and a future D5 quota; `min_length=1` let two unrelated clients collide into the same `ChatSession` and its `PERSONAL_DATA`-marked questions by both picking a short token |
+| 2026-09-02 | The frontend reduces every backend failure to a closed set of four `ChatFailure` keys, and never reads a failed response's body | A failing backend's body can name the model provider or quote the system prompt, which T-63 forbids showing a parent and T-52 treats as an attack surface. A status the backend starts returning that is not in the set degrades to `unreachable` instead of reaching the screen as an unhandled shape |
+| 2026-09-02 | `app/error.tsx` never binds the thrown `Error` it is handed | Its message and digest are the likeliest carriers of a stack trace, an internal hostname or a provider name anywhere in the frontend. Not destructuring it is a structural guarantee; remembering not to render it is not |
+| 2026-09-02 | 429 is mapped to the limit state before anything emits it | The anonymous quota is T-71/T-73, but T-63 owns what a parent sees when it trips, and a state nobody can reach is a state nobody has tested. The counter lands later without touching the client |
+| 2026-09-02 | State tone is a left border plus copy, never colored text; `--color-danger` is border-only | `--color-primary` already fails WCAG AA on white (see the note at the top of `globals.css`), so tinting status text would spread that debt rather than contain it. Border-only use also means the 3:1 non-text threshold applies, which the token clears in both light and dark |
 
 ## Integrations / external dependencies
 

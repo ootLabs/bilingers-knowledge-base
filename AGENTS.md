@@ -14,7 +14,7 @@ The repository is a **skeleton**. Deliberately absent, not to be added without a
 
 no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel
 
-What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a stubbed streaming `POST /chat` (writes the question, streams back a fixed placeholder, no model call), a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
+What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a stubbed streaming `POST /chat` (writes the question, streams back a fixed placeholder, no model call), the parent-facing chat screen with its loading, error, empty and limit states plus dedicated 404 and 500 screens, a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - those are design notes, not code.
 
 "No auth" still holds despite the `users` table: it has a password hash column and no hashing, no login, no sessions. The entity is modelled, authentication is not.
 
