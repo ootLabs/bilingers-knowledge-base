@@ -9,7 +9,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -18,7 +18,7 @@ from app import security
 from app.db import engine, get_session
 from app.main import app
 from app.models import Base
-from app.models.panel import PanelRole, PanelUser
+from app.models.panel import PanelLoginAttempt, PanelRole, PanelUser
 from app.services import rate_limit
 
 # Long enough for the panel's own rule (12 characters), and obviously fake.
@@ -108,9 +108,22 @@ def db_session(require_database: None) -> Iterator[Session]:
 
 @pytest.fixture
 def migrated_database(require_database: None) -> None:
-    """Skip when the database is up but migrations have not been applied."""
-    if not inspect(engine).has_table("alembic_version"):
-        pytest.skip("database not migrated; run: docker compose exec backend alembic upgrade head")
+    """Skip when the database is up but does not carry this branch's schema.
+
+    Every mapped table is checked, not just `alembic_version`: a database
+    migrated by another branch has that table and part of the schema, so the
+    older check passed and the tests then failed on a missing `panel_users`
+    instead of skipping with the hint below. Deriving the list from the
+    metadata also means the next migration does not have to remember to
+    extend it.
+    """
+    inspector = inspect(engine)
+    missing = sorted(name for name in Base.metadata.tables if not inspector.has_table(name))
+    if missing:
+        pytest.skip(
+            f"database missing tables ({', '.join(missing)}); "
+            "run: docker compose exec backend alembic upgrade head"
+        )
 
 
 @pytest.fixture
@@ -187,6 +200,21 @@ def cheap_password_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
     something an agent runs after every edit.
     """
     monkeypatch.setattr(security, "_BCRYPT_ROUNDS", 4)
+
+
+def attempts_for(session: Session, email: str) -> list[PanelLoginAttempt]:
+    """Every login attempt recorded for one address, oldest first.
+
+    Here rather than in one test module because three of them read this table:
+    logging in, the lockout, and the per-IP throttle.
+    """
+    return list(
+        session.execute(
+            select(PanelLoginAttempt)
+            .where(PanelLoginAttempt.email == email)
+            .order_by(PanelLoginAttempt.id)
+        ).scalars()
+    )
 
 
 def make_panel_user(

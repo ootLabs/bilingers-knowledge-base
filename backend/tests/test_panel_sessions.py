@@ -19,19 +19,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.panel import PanelLoginAttempt, PanelRole, PanelSession, PanelUser
+from app.models.panel import PanelRole, PanelSession, PanelUser
 from app.services.panel_auth import as_utc
-from tests.conftest import EDITOR_PASSWORD, auth_header, log_in, make_panel_user
-
-
-def attempts_for(session: Session, email: str) -> list[PanelLoginAttempt]:
-    return list(
-        session.execute(
-            select(PanelLoginAttempt)
-            .where(PanelLoginAttempt.email == email)
-            .order_by(PanelLoginAttempt.id)
-        ).scalars()
-    )
+from tests.conftest import (
+    EDITOR_PASSWORD,
+    attempts_for,
+    auth_header,
+    log_in,
+    make_panel_user,
+)
 
 
 def live_sessions_of(session: Session, user: PanelUser) -> list[PanelSession]:

@@ -14,6 +14,10 @@ from threading import Lock
 
 _lock = Lock()
 _attempts: dict[str, list[datetime]] = defaultdict(list)
+# When each key last had a refusal reported to its caller. A flood is refused
+# once per request but only worth recording once per window: see
+# `first_in_window` below.
+_reported: dict[str, datetime] = {}
 _calls_since_sweep = 0
 # Bounds the worst case between sweeps to this many distinct new keys, not
 # "however many addresses show up before this one gets checked again": a
@@ -24,11 +28,19 @@ _SWEEP_EVERY = 1000
 
 
 class TooManyAttempts(Exception):
-    """This key has been seen too often in the current window."""
+    """This key has been seen too often in the current window.
 
-    def __init__(self, retry_after_seconds: int) -> None:
+    `first_in_window` marks the refusal that opened the current run of them,
+    so a caller can record a flood without writing one row per request: at a
+    thousand requests a second, "throttled" logged every time is a second
+    denial-of-service against whatever stores it, and the thousandth row says
+    nothing the first did not.
+    """
+
+    def __init__(self, retry_after_seconds: int, *, first_in_window: bool = True) -> None:
         super().__init__("too many attempts from this address")
         self.retry_after_seconds = retry_after_seconds
+        self.first_in_window = first_in_window
 
 
 def _sweep_stale_keys(window_minutes: int) -> None:
@@ -42,6 +54,8 @@ def _sweep_stale_keys(window_minutes: int) -> None:
     stale = [key for key, seen in _attempts.items() if not seen or max(seen) <= window_start]
     for key in stale:
         del _attempts[key]
+    for key in [key for key, at in _reported.items() if at <= window_start]:
+        del _reported[key]
 
 
 def check(key: str, *, max_attempts: int, window_minutes: int) -> None:
@@ -60,7 +74,15 @@ def check(key: str, *, max_attempts: int, window_minutes: int) -> None:
             oldest = min(recent)
             retry_after = int((oldest + timedelta(minutes=window_minutes) - now).total_seconds())
             _attempts[key] = recent
-            raise TooManyAttempts(max(1, retry_after))
+            # Reported once per window, and the timestamp is only moved on the
+            # refusal that gets reported: sustained hammering therefore
+            # reports again after the window has passed, rather than either
+            # once ever or once per request.
+            last_reported = _reported.get(key)
+            first_in_window = last_reported is None or last_reported <= window_start
+            if first_in_window:
+                _reported[key] = now
+            raise TooManyAttempts(max(1, retry_after), first_in_window=first_in_window)
         recent.append(now)
         _attempts[key] = recent
 
@@ -80,4 +102,5 @@ def reset() -> None:
     global _calls_since_sweep
     with _lock:
         _attempts.clear()
+        _reported.clear()
         _calls_since_sweep = 0

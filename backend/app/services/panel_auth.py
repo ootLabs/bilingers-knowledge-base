@@ -42,6 +42,7 @@ class LoginFailure:
     NO_PASSWORD_SET = "no_password_set"
     INACTIVE_ACCOUNT = "inactive_account"
     LOCKED_ACCOUNT = "locked_account"
+    IP_THROTTLED = "ip_throttled"
 
 
 class AuthenticationFailed(Exception):
@@ -112,6 +113,39 @@ def _record_attempt(
     )
 
 
+def record_throttled_attempt(
+    session: Session,
+    *,
+    email: str,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> None:
+    """Record that an attempt was turned away by the per-IP throttle.
+
+    Without this, the requests refused before `login` runs leave no trace at
+    all, and `panel_login_attempts` goes quiet exactly when it matters: a real
+    flood would write at most one window's worth of rows and then nothing,
+    which reads afterwards like the attack stopped.
+
+    No account lookup, deliberately. This path exists to cost nothing, and
+    which address was typed is already the row's `email`; a caller that
+    wanted the account behind it can join on that later.
+
+    The caller is being refused, so nothing else is pending on this session
+    and committing here is safe.
+    """
+    _record_attempt(
+        session,
+        email=normalise_email(email),
+        user=None,
+        succeeded=False,
+        reason=LoginFailure.IP_THROTTLED,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    session.commit()
+
+
 def find_by_email(session: Session, email: str) -> PanelUser | None:
     return session.execute(
         select(PanelUser).where(PanelUser.email == normalise_email(email))
@@ -131,13 +165,23 @@ def _register_failure(session: Session, user: PanelUser) -> None:
     The re-select returns the same object `user` already refers to (same
     Session, same primary key, SQLAlchemy's identity map), so mutating it
     here is exactly as visible to the caller as mutating `user` directly.
+    `populate_existing` is what makes the lock worth taking: without it
+    SQLAlchemy hands back that identity-map object with the attributes it was
+    loaded with and never looks at the row the lock just secured, so the
+    increment would count from the value read before bcrypt ran and a
+    concurrent attempt's increment would still be lost - the exact race this
+    function exists to close (`expire_on_commit=False` in `app.db` means
+    nothing expires the object in between either).
 
     The counter resets when the lock is applied rather than staying at the
     limit: after the lock expires the account gets a fresh run of attempts,
     instead of being locked again by the very next typo.
     """
     locked_row = session.execute(
-        select(PanelUser).where(PanelUser.id == user.id).with_for_update()
+        select(PanelUser)
+        .where(PanelUser.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one()
     locked_row.failed_login_count += 1
     if locked_row.failed_login_count >= settings.panel_login_max_attempts:

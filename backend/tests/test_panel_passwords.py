@@ -196,6 +196,36 @@ class TestChangingYourOwnPassword:
             "/api/panel/users/me", headers=auth_header(current)
         ).status_code == 200
 
+    def test_changing_your_password_clears_a_lockout(
+        self, panel_client: TestClient, panel_editor: PanelUser
+    ) -> None:
+        """The two paths that set a password have to leave the account in the
+        same state, and `set_password_with_token` clears the counter.
+
+        A lock does not revoke sessions, so an editor whose account has just
+        been hammered to its limit still has a working tab. Changing the
+        password from it and then getting a 401 on the brand new password for
+        the rest of the window reads as broken login, not as the attack it
+        followed.
+        """
+        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
+        for _ in range(settings.panel_login_max_attempts):
+            panel_client.post(
+                "/api/panel/sessions",
+                json={"email": panel_editor.email, "password": "wciaz-nie-to-haslo"},
+            )
+        assert panel_editor.locked_until is not None
+
+        response = panel_client.post(
+            "/api/panel/users/me/password",
+            headers=auth_header(token),
+            json={"current_password": EDITOR_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+        assert response.status_code == 204
+        assert panel_editor.locked_until is None
+        assert panel_editor.failed_login_count == 0
+        assert log_in(panel_client, panel_editor.email, NEW_PASSWORD)
+
     def test_an_editor_may_change_their_own_password(
         self, panel_client: TestClient, panel_admin: PanelUser
     ) -> None:

@@ -127,11 +127,20 @@ def change_password(
     Other sessions are revoked, the caller's own is kept: someone changing
     their password because they suspect it leaked needs the other sessions
     gone, and does not need to be thrown out of the tab they are sitting in.
+
+    Leaves the account in the same state as `set_password_with_token`, lockout
+    counter included. A lock does not revoke sessions, so someone whose
+    account has just been hammered to its limit still has a working tab: they
+    change the password from it and would otherwise get a 401 on the brand new
+    password for the rest of the lockout, which reads as broken login rather
+    than as the attack it followed.
     """
     if not verify_password(current_password, user.password_hash):
         raise AuthenticationFailed("current password does not match")
 
     user.password_hash = hash_password(new_password)
+    user.failed_login_count = 0
+    user.locked_until = None
     revoke_all_sessions(session, user, except_session_id=keep_session_id)
     _invalidate_outstanding_resets(session, user)
     session.commit()

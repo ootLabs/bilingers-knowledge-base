@@ -1,40 +1,36 @@
-"""Logging into the panel: input rules, credentials, and the lockout.
+"""Logging into the panel: input rules and credentials.
 
 The panel is the only screen someone outside the team logs into, and it is the
 door to material covered by an NDA. So these tests are about refusals as much
-as about access: what a wrong password answers, what a locked account answers,
-what an IP address that will not stop trying gets back.
+as about access: what a wrong password answers, and what each kind of account
+that may not get in answers instead.
 
 Every test here runs against real SQL (see the `panel_db` fixture): a stub
 would only prove that the router calls something. Session lifetime and the
 PostgreSQL-specific guarantees live in `test_panel_sessions.py`; password
-resets and changing your own password live in `test_panel_passwords.py`.
+resets and changing your own password live in `test_panel_passwords.py`, the
+lockout in `test_panel_lockout.py`, and the per-IP throttle in front of all of
+it in `test_rate_limit.py`.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.models.panel import PanelLoginAttempt, PanelUser
+from app.models.panel import PanelUser
 from app.schemas.panel import PanelLoginRequest, PanelUserResponse, PasswordResetConfirmRequest
 from app.services.panel_auth import LoginFailure, as_utc, normalise_email
-from tests.conftest import EDITOR_PASSWORD, auth_header, log_in, make_panel_user
-
-
-def attempts_for(session: Session, email: str) -> list[PanelLoginAttempt]:
-    return list(
-        session.execute(
-            select(PanelLoginAttempt)
-            .where(PanelLoginAttempt.email == email)
-            .order_by(PanelLoginAttempt.id)
-        ).scalars()
-    )
+from tests.conftest import (
+    EDITOR_PASSWORD,
+    attempts_for,
+    auth_header,
+    log_in,
+    make_panel_user,
+)
 
 
 class TestInputRules:
@@ -196,113 +192,3 @@ class TestLogin:
         assert attempt.panel_user_id == panel_editor.id
         assert attempt.reason is None
         assert panel_editor.last_login_at is not None
-
-
-class TestLockout:
-    def _fail_once(self, client: TestClient, user: PanelUser):
-        return client.post(
-            "/api/panel/sessions",
-            json={"email": user.email, "password": "wciaz-nie-to-haslo"},
-        )
-
-    def test_the_account_locks_after_the_configured_number_of_failures(
-        self, panel_client: TestClient, panel_editor: PanelUser
-    ) -> None:
-        for _ in range(settings.panel_login_max_attempts):
-            assert self._fail_once(panel_client, panel_editor).status_code == 401
-
-        locked = self._fail_once(panel_client, panel_editor)
-        assert locked.status_code == 401
-        assert locked.json()["detail"] == "invalid_credentials"
-
-    def test_the_right_password_is_refused_while_the_account_is_locked(
-        self, panel_client: TestClient, panel_editor: PanelUser
-    ) -> None:
-        """Otherwise the limit only slows down an attacker who guesses wrong."""
-        for _ in range(settings.panel_login_max_attempts):
-            self._fail_once(panel_client, panel_editor)
-
-        response = panel_client.post(
-            "/api/panel/sessions",
-            json={"email": panel_editor.email, "password": EDITOR_PASSWORD},
-        )
-        assert response.status_code == 401
-
-    def test_a_locked_account_answers_exactly_like_a_wrong_password(
-        self, panel_client: TestClient, panel_editor: PanelUser
-    ) -> None:
-        """A distinct status for a locked account would tell an anonymous
-        caller which addresses have one after a handful of requests."""
-        for _ in range(settings.panel_login_max_attempts):
-            self._fail_once(panel_client, panel_editor)
-
-        locked = self._fail_once(panel_client, panel_editor)
-        wrong = panel_client.post(
-            "/api/panel/sessions",
-            json={"email": "nikt@fundacja.test", "password": "cokolwiek-tutaj"},
-        )
-        assert locked.status_code == wrong.status_code
-        assert locked.json() == wrong.json()
-
-    def test_a_locked_account_recovers_on_its_own(
-        self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session
-    ) -> None:
-        """An editor locked out mid-afternoon must not need an administrator."""
-        for _ in range(settings.panel_login_max_attempts):
-            self._fail_once(panel_client, panel_editor)
-
-        panel_editor.locked_until = datetime.now(UTC) - timedelta(seconds=1)
-        panel_db.flush()
-
-        response = panel_client.post(
-            "/api/panel/sessions",
-            json={"email": panel_editor.email, "password": EDITOR_PASSWORD},
-        )
-        assert response.status_code == 201
-        assert panel_editor.locked_until is None
-        assert panel_editor.failed_login_count == 0
-
-    def test_hammering_a_locked_account_does_not_extend_the_lock(
-        self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session
-    ) -> None:
-        """Otherwise anyone could keep the real owner out indefinitely."""
-        for _ in range(settings.panel_login_max_attempts):
-            self._fail_once(panel_client, panel_editor)
-        locked_until = panel_editor.locked_until
-
-        for _ in range(3):
-            assert self._fail_once(panel_client, panel_editor).status_code == 401
-        assert panel_editor.locked_until == locked_until
-
-    def test_a_successful_login_clears_the_counter(
-        self, panel_client: TestClient, panel_editor: PanelUser
-    ) -> None:
-        for _ in range(settings.panel_login_max_attempts - 1):
-            self._fail_once(panel_client, panel_editor)
-        log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        assert panel_editor.failed_login_count == 0
-
-
-class TestIpRateLimiting:
-    def test_too_many_attempts_from_one_address_are_throttled(
-        self, panel_client: TestClient, panel_db: Session, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Thrown before `login` runs, so a flood does not pay for bcrypt."""
-        monkeypatch.setattr(settings, "panel_login_ip_max_attempts", 3)
-
-        for _ in range(3):
-            response = panel_client.post(
-                "/api/panel/sessions",
-                json={"email": "ktos@fundacja.test", "password": "cokolwiek"},
-            )
-            assert response.status_code == 401
-
-        throttled = panel_client.post(
-            "/api/panel/sessions",
-            json={"email": "ktos@fundacja.test", "password": "cokolwiek"},
-        )
-        assert throttled.status_code == 429
-        assert int(throttled.headers["retry-after"]) > 0
-        # Only three rows: the fourth request never reached `login`.
-        assert len(attempts_for(panel_db, "ktos@fundacja.test")) == 3
-
