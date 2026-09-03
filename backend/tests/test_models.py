@@ -38,6 +38,15 @@ EXPECTED_TABLES = {
     "knowledge_base_versions",
 }
 
+# Panel accounts (T-82) are a separate track from parent accounts: different
+# table, different threat model, same migration chain.
+PANEL_TABLES = {
+    "panel_users",
+    "panel_sessions",
+    "panel_login_attempts",
+    "panel_password_resets",
+}
+
 
 def column(model: type, name: str):
     return model.__table__.columns[name]
@@ -131,6 +140,15 @@ class TestPersonalDataRegistry:
         assert personal_data_columns() == [
             ("chat_sessions", "token"),
             ("knowledge_gaps", "question"),
+            # Who tried to get into the panel, from where and with what: an
+            # address that matches no account is still a person's address.
+            ("panel_login_attempts", "email"),
+            ("panel_login_attempts", "ip_address"),
+            ("panel_login_attempts", "user_agent"),
+            ("panel_sessions", "ip_address"),
+            ("panel_sessions", "user_agent"),
+            ("panel_users", "email"),
+            ("panel_users", "password_hash"),
             ("queries", "answer"),
             ("queries", "question"),
             ("users", "email"),
@@ -149,6 +167,10 @@ class TestMigrations:
         """The stack applies migrations on start, with no manual step."""
         present = set(inspect(engine).get_table_names())
         assert EXPECTED_TABLES <= present
+
+    def test_the_panel_tables_are_in_the_same_chain(self, migrated_database: None) -> None:
+        """Panel authentication is a migration, not a hand-applied script."""
+        assert PANEL_TABLES <= set(inspect(engine).get_table_names())
 
     def test_migration_state_is_recorded(self, migrated_database: None) -> None:
         with engine.connect() as connection:

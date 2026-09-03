@@ -28,6 +28,16 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://bilingers:bilingers@db:5432/bilingers}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      PANEL_SESSION_TTL_MINUTES: ${PANEL_SESSION_TTL_MINUTES:-720}
+      PANEL_LOGIN_MAX_ATTEMPTS: ${PANEL_LOGIN_MAX_ATTEMPTS:-5}
+      PANEL_LOGIN_LOCKOUT_MINUTES: ${PANEL_LOGIN_LOCKOUT_MINUTES:-15}
+      PANEL_PASSWORD_RESET_TTL_HOURS: ${PANEL_PASSWORD_RESET_TTL_HOURS:-24}
+      # Passed through explicitly like every other setting: there is no
+      # `env_file` here and pydantic-settings looks for `.env` next to the
+      # code in the container, where the repository root's copy never lands,
+      # so a variable missing from this block is a variable nobody can set.
+      PANEL_LOGIN_IP_MAX_ATTEMPTS: ${PANEL_LOGIN_IP_MAX_ATTEMPTS:-20}
+      PANEL_LOGIN_IP_WINDOW_MINUTES: ${PANEL_LOGIN_IP_WINDOW_MINUTES:-5}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
