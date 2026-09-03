@@ -18,7 +18,18 @@ from app.security import MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH
 # and no human types. This rejects the shapes that are certainly wrong and
 # leaves the rest to the fact that an administrator types these by hand for
 # people they know by name.
-_EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+#
+# Control characters are named explicitly because `\s` does not cover them: a
+# NUL byte passes `[^@\s]`, survives `normalise_email`'s `strip()`, and is then
+# refused by the driver once the address reaches a query as a bind parameter.
+# That refusal would answer an unauthenticated caller with a 500 and no audit
+# row for the attempt, when the input is plainly theirs to fix - the same
+# reasoning behind `app.services.chat` answering 422 for a NUL byte in a
+# question, applied one layer earlier because here the boundary can see it.
+_NOT_IN_AN_ADDRESS = r"@\s\x00-\x1f\x7f"
+_EMAIL_PATTERN = (
+    rf"^[^{_NOT_IN_AN_ADDRESS}]+@[^{_NOT_IN_AN_ADDRESS}]+\.[^{_NOT_IN_AN_ADDRESS}]+$"
+)
 
 Email = Annotated[str, Field(pattern=_EMAIL_PATTERN, max_length=320)]
 

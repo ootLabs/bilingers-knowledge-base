@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
+from app.services.panel_errors import unavailable_on_database_failure
 
 
 class LoginFailure:
@@ -113,6 +114,7 @@ def _record_attempt(
     )
 
 
+@unavailable_on_database_failure
 def record_throttled_attempt(
     session: Session,
     *,
@@ -189,6 +191,7 @@ def _register_failure(session: Session, user: PanelUser) -> None:
         locked_row.failed_login_count = 0
 
 
+@unavailable_on_database_failure
 def login(
     session: Session,
     *,
@@ -248,7 +251,17 @@ def login(
         raise AuthenticationFailed("account temporarily locked")
 
     if not password_ok:
-        _register_failure(session, user)
+        if user.is_active:
+            # Only an account that could actually log in has anything for the
+            # lockout to protect. Charging a deactivated one would let anybody
+            # lock it with five requests, and `update_panel_user` does not clear
+            # `locked_until` when it is switched back on, so its owner would
+            # then be refused their own correct password by the lock check
+            # above for the rest of it - the exact outcome the `is_active`
+            # branch further down avoids for a *correct* password, undone here
+            # for a wrong one. The reason recorded stays the real one either
+            # way, so the audit trail still says somebody was guessing.
+            _register_failure(session, user)
         _record_attempt(
             session,
             email=address,
@@ -271,7 +284,8 @@ def login(
         # counted as a failure: the password was right, so this is not
         # evidence of guessing, and charging it against the lockout would
         # leave a reactivated account still locked out on its own correct
-        # password.
+        # password. The wrong-password branch above skips the counter for a
+        # deactivated account for that same reason.
         _record_attempt(
             session,
             email=address,
@@ -308,6 +322,7 @@ def login(
     return panel_session, token
 
 
+@unavailable_on_database_failure
 def resolve_session(session: Session, token: str) -> tuple[PanelUser, PanelSession] | None:
     """Return the account behind a session token, or None if it cannot be used.
 
@@ -337,6 +352,7 @@ def resolve_session(session: Session, token: str) -> tuple[PanelUser, PanelSessi
     return user, panel_session
 
 
+@unavailable_on_database_failure
 def revoke_session(session: Session, panel_session: PanelSession) -> None:
     """Log out. Idempotent: revoking an already revoked session keeps the
     original timestamp, so the audit trail says when access actually ended."""

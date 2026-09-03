@@ -163,6 +163,23 @@ class TestAgainstRealPostgres:
         ).scalar_one()
         assert stored == "admin"
 
+    def test_a_nul_byte_in_the_address_never_reaches_the_driver(
+        self, postgres_panel_client: TestClient, cheap_password_hashing: None
+    ) -> None:
+        """The review finding this closes, on the driver that produced it.
+
+        psycopg refuses a NUL byte in a bind parameter, and the address goes
+        into the account lookup as one, so before `app.schemas.panel` excluded
+        control characters this request answered an unauthenticated caller with
+        a 500 (and recorded no attempt). It is not an outage either: 503 would
+        invite the same client to retry a request that can never work.
+        """
+        response = postgres_panel_client.post(
+            "/api/panel/sessions",
+            json={"email": "magdalena\x00@fundacja.test", "password": "cokolwiek-tutaj"},
+        )
+        assert response.status_code == 422
+
     def test_a_failed_attempt_survives_the_failed_login(
         self, postgres_panel_client: TestClient, cheap_password_hashing: None, db_session: Session
     ) -> None:

@@ -30,7 +30,13 @@ from app.services.panel_users import (
     update_panel_user,
 )
 
-router = APIRouter(prefix="/api/panel/users", tags=["panel"])
+router = APIRouter(
+    prefix="/api/panel/users",
+    tags=["panel"],
+    # Same reasoning as `panel_auth.py`: the 503 is the app-level
+    # `PanelServiceUnavailable` handler's, not any one endpoint's.
+    responses={503: {"description": "The database is temporarily unavailable."}},
+)
 
 
 @router.get("", response_model=list[PanelUserResponse])

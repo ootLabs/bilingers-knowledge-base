@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models.panel import PanelRole, PanelUser
 from app.schemas.panel import PanelUserUpdateRequest
+from app.services.panel_errors import PanelServiceUnavailable
 from app.services.panel_users import EmailAlreadyUsed, create_panel_user
 from tests.conftest import (
     ADMIN_PASSWORD,
@@ -150,9 +151,11 @@ class TestCreatingAnAccount:
         self, panel_db: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Only the email uniqueness constraint should translate to
-        `EmailAlreadyUsed`; anything else about the insert must propagate as
-        itself, or an administrator would be told about a duplicate address
-        that does not exist."""
+        `EmailAlreadyUsed`; anything else about the insert must not, or an
+        administrator would be told about a duplicate address that does not
+        exist. It comes out as the panel's infrastructure failure (a 503) with
+        the original error as its cause, not as a 409 and not as a bare
+        `IntegrityError` reaching the router."""
 
         def _boom() -> None:
             raise IntegrityError(
@@ -161,8 +164,9 @@ class TestCreatingAnAccount:
 
         monkeypatch.setattr(panel_db, "flush", _boom)
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(PanelServiceUnavailable) as refused:
             create_panel_user(panel_db, email="ktos@fundacja.test", role=PanelRole.EDITOR)
+        assert isinstance(refused.value.__cause__, IntegrityError)
 
     def test_a_named_constraint_violation_is_matched_by_name_not_by_substring(
         self, panel_db: Session, monkeypatch: pytest.MonkeyPatch
@@ -182,8 +186,9 @@ class TestCreatingAnAccount:
 
         monkeypatch.setattr(panel_db, "flush", _boom)
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(PanelServiceUnavailable) as refused:
             create_panel_user(panel_db, email="ktos@fundacja.test", role=PanelRole.EDITOR)
+        assert isinstance(refused.value.__cause__, IntegrityError)
 
     def test_the_named_email_uniqueness_constraint_is_still_recognised(
         self, panel_db: Session, monkeypatch: pytest.MonkeyPatch

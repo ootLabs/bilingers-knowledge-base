@@ -59,6 +59,37 @@ class TestPasswordHashing:
         assert MIN_PASSWORD_LENGTH == 12
 
 
+class TestNulBytes:
+    """A NUL byte in a password is neither an error nor a truncation point.
+
+    Nothing rejects one on the way in, deliberately: a password is only ever
+    hashed, and the hash it produces is ASCII, so unlike an address it never
+    reaches the database as text. That makes this bcrypt's promise rather than
+    the schema's, and the promise is worth pinning: raising here would be a
+    500 on the login endpoint, and truncating at the NUL would let anything
+    starting with one match a hash of the empty string, straight past the
+    twelve-character floor.
+    """
+
+    def test_a_password_containing_one_verifies_only_against_itself(self) -> None:
+        smuggled = "\x00" + "a" * 11
+        stored = hash_password(smuggled)
+        assert verify_password(smuggled, stored) is True
+        assert verify_password("\x00", stored) is False
+        assert verify_password("", stored) is False
+
+    def test_the_bytes_after_one_are_not_ignored(self) -> None:
+        """The truncation case stated as its own assertion: if bcrypt stopped
+        reading at the NUL, these two would hash to the same credential."""
+        assert verify_password("\x00" + "a" * 11, hash_password("\x00" + "b" * 11)) is False
+
+    def test_a_missing_hash_is_still_refused_without_raising(self) -> None:
+        """The unknown-account path pays for a comparison against a hash of
+        random bytes; a NUL in the password offered must not turn that into an
+        exception, which would answer "no such account" with a 500."""
+        assert verify_password("\x00" + "a" * 11, None) is False
+
+
 class TestTokens:
     def test_every_token_is_different(self) -> None:
         assert len({new_token() for _ in range(100)}) == 100

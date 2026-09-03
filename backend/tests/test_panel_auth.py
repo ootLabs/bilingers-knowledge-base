@@ -52,6 +52,24 @@ class TestInputRules:
         rejecting a short one there tells an attacker the real one is longer."""
         assert PanelLoginRequest(email="a@b.test", password="x").password == "x"
 
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "magdalena\x00@fundacja.test",
+            "magdalena@fundacja\x00.test",
+            "magdalena@fundacja.test\x00",
+            "magdalena\x1f@fundacja.test",
+            "magdalena\x7f@fundacja.test",
+        ],
+    )
+    def test_a_control_character_in_an_address_is_refused(self, address: str) -> None:
+        """The whitespace class does not cover these, so a NUL byte used to
+        pass the pattern and survive the strip in `normalise_email`. It was
+        then refused by the driver, one layer too late to be anything but a
+        500 on an unauthenticated endpoint."""
+        with pytest.raises(ValueError):
+            PanelLoginRequest(email=address, password="cokolwiek-tutaj")
+
     def test_a_new_password_below_the_floor_is_refused(self) -> None:
         with pytest.raises(ValueError):
             PasswordResetConfirmRequest(token="t", new_password="krotkie")
@@ -182,6 +200,19 @@ class TestLogin:
         )
         assert user.failed_login_count == 0
         assert user.locked_until is None
+
+    def test_a_nul_byte_in_the_address_is_a_422_not_a_refusal_deeper_in(
+        self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session
+    ) -> None:
+        """Rejected at the boundary, so nothing carries it to the database and
+        no attempt is recorded for an address that cannot exist. On PostgreSQL
+        the same request used to reach psycopg and answer 500."""
+        response = panel_client.post(
+            "/api/panel/sessions",
+            json={"email": panel_editor.email + "\x00", "password": EDITOR_PASSWORD},
+        )
+        assert response.status_code == 422
+        assert attempts_for(panel_db, panel_editor.email) == []
 
     def test_a_successful_login_is_recorded_with_its_account(
         self, panel_client: TestClient, panel_editor: PanelUser, panel_db: Session

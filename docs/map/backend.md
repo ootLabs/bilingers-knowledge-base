@@ -4,7 +4,7 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 
 | Path | What's in it |
 |---|---|
-| `backend/app/main.py` | App assembly only: `FastAPI()` instance, CORS middleware, router includes, `GET /` |
+| `backend/app/main.py` | App assembly only: `FastAPI()` instance, CORS middleware, router includes, `GET /`, and the one exception handler turning `PanelServiceUnavailable` into `503` |
 | `backend/app/config.py` | `Settings` (pydantic-settings) - env vars, `cors_origin_list`; module-level `settings` singleton |
 | `backend/app/db.py` | SQLAlchemy `engine`, `SessionLocal`, `get_session()` FastAPI dependency |
 | `backend/app/security.py` | `hash_password`, `verify_password`, `new_token`, `hash_token`, `MIN_PASSWORD_LENGTH`, `MAX_PASSWORD_BYTES` - bcrypt and SHA-256 primitives, no domain knowledge |
@@ -18,8 +18,9 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/app/services/rate_limit.py` | `check`, `reset`, `TooManyAttempts` (carrying `first_in_window`, so a flood is recorded once per window rather than once per request) - in-process sliding-window throttle for login attempts by IP address, ahead of the per-account lockout |
 | `backend/app/services/panel_passwords.py` | `issue_password_reset`, `set_password_with_token`, `change_password`, `InvalidPasswordResetToken` |
 | `backend/app/services/panel_users.py` | `create_panel_user`, `list_panel_users`, `update_panel_user`, `reset_password_for`, `EmailAlreadyUsed`, `PanelUserNotFound`, `PanelUserInactive`, `SelfManagementRefused` |
+| `backend/app/services/panel_errors.py` | `PanelServiceUnavailable`, `unavailable_on_database_failure` - the decorator that keeps a driver exception from crossing the panel's service boundary; every panel service function a router or dependency calls carries it |
 | `backend/app/services/chat.py` | `get_or_create_chat_session`, `record_query`, `stream_placeholder_answer`, `ChatServiceUnavailable`, `InvalidChatInput` - the streaming pipe from T-12, no RAG/model call yet |
-| `backend/app/schemas/panel.py` | `PanelLoginRequest`, `PanelSessionResponse`, `PanelUserResponse`, `PanelUserCreateRequest`, `PanelUserUpdateRequest`, `PasswordResetResponse`, `PasswordResetConfirmRequest`, `PasswordChangeRequest`; password length rules live here |
+| `backend/app/schemas/panel.py` | `PanelLoginRequest`, `PanelSessionResponse`, `PanelUserResponse`, `PanelUserCreateRequest`, `PanelUserUpdateRequest`, `PasswordResetResponse`, `PasswordResetConfirmRequest`, `PasswordChangeRequest`; password length rules and the address pattern (which excludes control characters, NUL included) live here |
 | `backend/app/schemas/chat.py` | `ChatRequest` (`question`, `session_token`); rejects blank/oversized input |
 | `backend/requirements.txt` | Pinned runtime dependencies |
 | `backend/requirements-dev.txt` | Test tooling on top of the runtime pins: pytest, pytest-cov, httpx |
@@ -68,11 +69,12 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, plus integration round trips against real PostgreSQL |
 | `backend/tests/test_security.py` | Hashing and tokens: salting, the missing-hash case, the bcrypt byte limit |
 | `backend/tests/test_panel_auth.py` | Login input rules and credentials: what each kind of account that may not get in answers instead |
-| `backend/tests/test_panel_lockout.py` | The per-account lockout: counting failures, locking, recovering, and that the counter is read from the locked row rather than from a stale mapped object |
+| `backend/tests/test_panel_lockout.py` | The per-account lockout: counting failures, locking, recovering, that a deactivated account is never charged (only recorded), and that the counter is read from the locked row rather than from a stale mapped object |
 | `backend/tests/test_panel_sessions.py` | Session lifetime, plus a PostgreSQL class for the migrated schema and the unique constraint |
 | `backend/tests/test_panel_passwords.py` | Password resets and changing your own password |
 | `backend/tests/test_panel_users.py` | Who may create accounts, creating one and setting its first password |
 | `backend/tests/test_panel_user_management.py` | Role/activity changes, self-lockout refusal, administrator-issued resets |
+| `backend/tests/test_panel_errors.py` | A dropped connection: that every guarded panel service function raises `PanelServiceUnavailable`, and that the HTTP layer answers `503` for it, including when it comes from the session dependency |
 | `backend/tests/test_cli.py` | `python -m app.cli create-admin` - the bootstrap command |
 | `backend/tests/test_rate_limit.py` | The per-IP login throttle: the sliding window, that stale keys are swept instead of growing the dict forever, and that a throttled flood leaves one audit row per window |
 | `backend/tests/test_chat.py` | Validation, the write-before-stream order, `SQLAlchemyError` to `503`, plus integration tests proving real persistence and session reuse |

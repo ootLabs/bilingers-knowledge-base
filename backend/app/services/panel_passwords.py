@@ -27,6 +27,7 @@ from app.services.panel_auth import (
     revoke_all_sessions,
     utcnow,
 )
+from app.services.panel_errors import unavailable_on_database_failure
 
 
 class InvalidPasswordResetToken(Exception):
@@ -80,6 +81,7 @@ def _invalidate_outstanding_resets(session: Session, user: PanelUser) -> None:
     for stale in outstanding:
         stale.used_at = now
 
+@unavailable_on_database_failure
 def set_password_with_token(session: Session, *, token: str, new_password: str) -> PanelUser:
     """Spend a reset token and set the account's password.
 
@@ -114,6 +116,7 @@ def set_password_with_token(session: Session, *, token: str, new_password: str) 
     return user
 
 
+@unavailable_on_database_failure
 def change_password(
     session: Session,
     *,

@@ -39,8 +39,16 @@ def _absent_password_hash(rounds: int) -> bytes:
     Computed on first use rather than at import, and keyed by cost, so lowering
     the cost actually lowers it: a constant fixed at import would keep every
     such comparison at production cost no matter what the caller configured.
+
+    Hex, not raw bytes, and that is not cosmetic: raw 32 bytes contain a NUL
+    roughly one time in eight. The bcrypt in use hashes those without
+    complaint, but this is the unknown-account path, the one whose whole job is
+    to cost the same as a real comparison, and `lru_cache` does not cache
+    exceptions - so a future version that refused a NUL byte would turn it into
+    an intermittent 500 that says "no such account" out loud. 64 hex characters
+    are still well inside the 72 bytes bcrypt reads.
     """
-    return bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt(rounds))
+    return bcrypt.hashpw(secrets.token_hex(32).encode("ascii"), bcrypt.gensalt(rounds))
 
 
 # 32 bytes of entropy, URL-safe. Session and password-reset tokens are the only

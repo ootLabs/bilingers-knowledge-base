@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.panel import PanelPasswordReset, PanelRole, PanelUser
 from app.services.panel_auth import normalise_email, revoke_all_sessions
+from app.services.panel_errors import unavailable_on_database_failure
 from app.services.panel_passwords import issue_password_reset
 
 
@@ -45,6 +46,7 @@ class SelfManagementRefused(Exception):
     """
 
 
+@unavailable_on_database_failure
 def create_panel_user(
     session: Session, *, email: str, role: PanelRole
 ) -> tuple[PanelUser, PanelPasswordReset, str]:
@@ -63,7 +65,10 @@ def create_panel_user(
         # Narrowed to the constraint this insert can actually violate today:
         # a future `CHECK` or `NOT NULL` on `panel_users` must surface as
         # itself, not be reported to an administrator as a duplicate address
-        # that does not exist. On PostgreSQL this checks the actual constraint
+        # that does not exist. Re-raised, it reaches this function's decorator
+        # and answers 503, matching how `app.services.chat` treats a constraint
+        # failure it did not expect: the boundary already validated the input,
+        # so it is the server that is wrong, not the request. On PostgreSQL this checks the actual constraint
         # name (`panel_users_email_key`), not just whether "email" appears
         # somewhere in the message, so an unrelated future constraint whose
         # name happens to mention "email" cannot be misread as a duplicate
@@ -84,6 +89,7 @@ def create_panel_user(
     return user, reset, token
 
 
+@unavailable_on_database_failure
 def list_panel_users(session: Session) -> list[PanelUser]:
     """Every account, oldest first. No pagination: there are three to five."""
     return list(session.execute(select(PanelUser).order_by(PanelUser.id)).scalars())
@@ -96,6 +102,7 @@ def get_panel_user(session: Session, user_id: int) -> PanelUser:
     return user
 
 
+@unavailable_on_database_failure
 def update_panel_user(
     session: Session,
     *,
@@ -129,6 +136,7 @@ def update_panel_user(
     return user
 
 
+@unavailable_on_database_failure
 def reset_password_for(
     session: Session, user_id: int
 ) -> tuple[PanelUser, PanelPasswordReset, str]:

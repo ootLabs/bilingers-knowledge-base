@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.panel import PanelUser
-from tests.conftest import EDITOR_PASSWORD, log_in
+from app.services.panel_auth import LoginFailure
+from tests.conftest import EDITOR_PASSWORD, attempts_for, log_in, make_panel_user
 
 
 class TestLockout:
@@ -96,6 +97,49 @@ class TestLockout:
         for _ in range(3):
             assert self._fail_once(panel_client, panel_editor).status_code == 401
         assert panel_editor.locked_until == locked_until
+
+    def test_wrong_passwords_do_not_lock_a_deactivated_account(
+        self, panel_client: TestClient, cheap_password_hashing: None, panel_db: Session
+    ) -> None:
+        """An account that is switched off cannot be logged into with any
+        password, so there is nothing here for the lockout to protect - and
+        charging these failures would hand anybody a way to lock an account
+        that nothing in the panel can unlock: switching it back on does not
+        clear `locked_until`, so its owner would return to a 401 on their own
+        correct password.
+        """
+        user = make_panel_user(
+            panel_db, email="byla@fundacja.test", password=EDITOR_PASSWORD, is_active=False
+        )
+        for _ in range(settings.panel_login_max_attempts):
+            assert self._fail_once(panel_client, user).status_code == 401
+
+        assert user.failed_login_count == 0
+        assert user.locked_until is None
+
+        user.is_active = True
+        panel_db.flush()
+        response = panel_client.post(
+            "/api/panel/sessions",
+            json={"email": user.email, "password": EDITOR_PASSWORD},
+        )
+        assert response.status_code == 201
+
+    def test_a_wrong_password_on_a_deactivated_account_is_still_recorded(
+        self, panel_client: TestClient, cheap_password_hashing: None, panel_db: Session
+    ) -> None:
+        """Not counting the failure must not mean forgetting it: somebody
+        guessing at a switched-off account is exactly what the audit table is
+        for, and the reason recorded is the real one, not `inactive_account`."""
+        user = make_panel_user(
+            panel_db, email="byla@fundacja.test", password=EDITOR_PASSWORD, is_active=False
+        )
+        self._fail_once(panel_client, user)
+
+        attempts = attempts_for(panel_db, user.email)
+        assert [(a.succeeded, a.reason) for a in attempts] == [
+            (False, LoginFailure.BAD_PASSWORD)
+        ]
 
     def test_a_successful_login_clears_the_counter(
         self, panel_client: TestClient, panel_editor: PanelUser

@@ -36,7 +36,16 @@ from app.services.panel_passwords import (
 from app.services.rate_limit import TooManyAttempts
 from app.services.rate_limit import check as check_ip_rate_limit
 
-router = APIRouter(prefix="/api/panel", tags=["panel"])
+# The 503 is declared on the router, not on each route: it comes from the
+# `PanelServiceUnavailable` handler in `app.main`, which can answer any of them
+# (including before a handler runs, from the session dependency), so listing it
+# per endpoint would be the same line four times and one line to forget on the
+# fifth.
+router = APIRouter(
+    prefix="/api/panel",
+    tags=["panel"],
+    responses={503: {"description": "The database is temporarily unavailable."}},
+)
 
 
 def _client_ip(request: Request) -> str | None:
