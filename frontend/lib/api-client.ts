@@ -131,6 +131,11 @@ export async function* streamAnswer({
       yield tail;
     }
   } finally {
+    // Not `releaseLock` alone: leaving the loop early - the caller breaks out
+    // of its `for await`, or throws inside it - would otherwise leave the
+    // response body open on a connection nobody reads any more. An abort
+    // already tears the body down; this covers every other way out.
+    await reader.cancel();
     reader.releaseLock();
   }
 }

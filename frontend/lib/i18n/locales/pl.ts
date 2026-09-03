@@ -67,6 +67,10 @@ const pl = {
     invalid_question: {
       title: "Nie możemy przyjąć tego pytania",
       description: "Wpisz je jeszcze raz, krótszym i prostszym zdaniem.",
+      // Its own label rather than the shared "Spróbuj ponownie": the backend
+      // refused this exact wording, so the only thing that helps is writing
+      // it again, and the button has to say so.
+      action: "Popraw pytanie",
     },
     // Not phrased as a fault and not phrased in the second person singular
     // with a gendered verb form: T-61 calls this the main conversion point

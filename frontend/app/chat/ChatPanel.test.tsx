@@ -70,11 +70,14 @@ describe("ChatPanel", () => {
       yield "chat.placeholder_answer.chunk_0\n";
     });
 
-    render(<ChatPanel />);
+    const { container } = render(<ChatPanel />);
     submit();
 
     expect(screen.getByText("Asystent pisze")).toBeInTheDocument();
     expect(screen.queryByText("Nie zadano jeszcze pytania")).not.toBeInTheDocument();
+    // Not busy yet: the typing state is the one thing worth announcing the
+    // moment it appears.
+    expect(container.querySelector(".chat-status")).toHaveAttribute("aria-busy", "false");
   });
 
   it("disables sending while an answer is on its way", () => {
@@ -174,10 +177,11 @@ describe("ChatPanel", () => {
     expect(screen.queryByText(/chunk_99/)).not.toBeInTheDocument();
   });
 
+  // `invalid_question` is deliberately not in here: a retry is only offered
+  // where the same question can still succeed, which after a 422 it cannot.
   it.each([
     ["unreachable", "Nie udało się połączyć"],
     ["database_unavailable", "Asystent jest chwilowo niedostępny"],
-    ["invalid_question", "Nie możemy przyjąć tego pytania"],
   ] as const)("shows Polish copy with a retry for the %s failure", async (failure, title) => {
     streamAnswerMock.mockImplementation(failing(new ChatRequestError(failure)));
 
@@ -225,6 +229,57 @@ describe("ChatPanel", () => {
       "/account",
     );
     expect(screen.queryByRole("button", { name: "Spróbuj ponownie" })).not.toBeInTheDocument();
+  });
+
+  // The mirror of the limit case: the backend refused this exact wording, so
+  // re-posting it would fail the same way forever. The copy tells the parent
+  // to write the question again, and the button has to make that possible
+  // rather than fire a request that cannot succeed.
+  it("returns the cursor to the box instead of re-sending a refused question", async () => {
+    streamAnswerMock.mockImplementation(failing(new ChatRequestError("invalid_question")));
+
+    render(<ChatPanel />);
+    submit();
+
+    await waitFor(() => {
+      expect(screen.getByText("Nie możemy przyjąć tego pytania")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Spróbuj ponownie" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Popraw pytanie" }));
+
+    expect(screen.getByLabelText("Twoje pytanie")).toHaveFocus();
+    expect(streamAnswerMock).toHaveBeenCalledOnce();
+  });
+
+  // Every chunk rewrites the same paragraph inside the live region, so
+  // without this a screen reader re-reads the whole answer from the top on
+  // each one - six times for the current placeholder.
+  it("holds the live region busy until the answer has finished arriving", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    streamAnswerMock.mockImplementation(async function* () {
+      yield "chat.placeholder_answer.chunk_0\n";
+      await gate;
+      yield "chat.placeholder_answer.chunk_1\n";
+    });
+
+    const { container } = render(<ChatPanel />);
+    const region = () => container.querySelector(".chat-status");
+    submit();
+
+    await waitFor(() => {
+      expect(region()).toHaveAttribute("aria-busy", "true");
+    });
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByText(/nie korzysta jeszcze z bazy wiedzy fundacji/)).toBeInTheDocument();
+    });
+    expect(region()).toHaveAttribute("aria-busy", "false");
+    expect(region()).toHaveAttribute("aria-live", "polite");
   });
 
   it("shows none of an unexpected error's detail on screen", async () => {

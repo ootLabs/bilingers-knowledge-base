@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import StatusMessage from "@/components/StatusMessage";
 import { getTranslations } from "@/lib/i18n";
 
@@ -37,7 +39,7 @@ export default function ErrorScreen({
       {/* Second way out: if retrying the same broken route keeps failing,
           the parent still has somewhere to go. */}
       <p className="status-message__fallback">
-        <a href="/">{t("serverError.action")}</a>
+        <Link href="/">{t("serverError.action")}</Link>
       </p>
     </main>
   );

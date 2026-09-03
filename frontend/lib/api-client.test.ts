@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatRequestError, createSessionToken, streamAnswer } from "./api-client";
 
 /** A 200 whose body hands back `chunks` one read at a time. */
-function streamingResponse(chunks: Uint8Array[]): Response {
+function streamingResponse(
+  chunks: Uint8Array[],
+  cancel: () => Promise<void> = async () => {},
+): Response {
   let index = 0;
   return {
     ok: true,
@@ -14,6 +17,7 @@ function streamingResponse(chunks: Uint8Array[]): Response {
           index < chunks.length
             ? { done: false, value: chunks[index++] }
             : { done: true, value: undefined },
+        cancel,
         releaseLock: () => {},
       }),
     },
@@ -144,6 +148,30 @@ describe("streamAnswer", () => {
     expect(text).not.toHaveBeenCalled();
     expect(json).not.toHaveBeenCalled();
     expect((error as Error).message).not.toContain("Foo");
+  });
+
+  // An abort tears the body down on its own, but a caller that stops reading
+  // any other way - a `break`, or a throw inside its own loop body - only
+  // runs this generator's `finally`. Releasing the lock there without
+  // cancelling leaves the response body open.
+  it("cancels the response body when the caller stops reading early", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          streamingResponse([encoder.encode("pierwszy "), encoder.encode("drugi")], cancel),
+        ),
+    );
+
+    for await (const chunk of ask()) {
+      expect(chunk).toBe("pierwszy ");
+      break;
+    }
+
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("rethrows an abort as-is so a cancelled request is not reported as a fault", async () => {

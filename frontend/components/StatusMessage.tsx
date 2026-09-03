@@ -11,6 +11,10 @@ import { getTranslations } from "@/lib/i18n";
 
 export type StatusTone = "info" | "error" | "limit";
 
+// Two shapes, because a way onward is either something that happens on this
+// screen or somewhere to go. What "retry" actually does is the caller's to
+// decide: `ChatPanel` uses it both to re-send a question and, after a 422,
+// to hand the cursor back to the box without sending anything.
 export type StatusAction =
   | { kind: "retry"; labelKey: string; onRetry: () => void }
   | { kind: "link"; labelKey: string; href: string };

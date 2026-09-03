@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import StatusMessage from "@/components/StatusMessage";
+import StatusMessage, { type StatusAction } from "@/components/StatusMessage";
 import {
   ChatRequestError,
   type ChatFailure,
@@ -41,14 +41,16 @@ export default function ChatPanel() {
   const [question, setQuestion] = useState("");
   const [state, setState] = useState<PanelState>({ phase: "empty" });
 
-  // Minted on first use rather than at module scope: `crypto.randomUUID`
-  // would otherwise run during prerender and hand every visitor the same
-  // conversation.
+  // Minted on first use rather than at module scope: this module is evaluated
+  // during prerender too, and the call belongs on the click path, where `ask`
+  // can turn a failure into a state the parent can see. Why the token is
+  // built the way it is: `createSessionToken`.
   const sessionToken = useRef<string | null>(null);
   const inFlight = useRef<AbortController | null>(null);
   // The question the current answer belongs to, so retry re-sends what was
   // actually asked even if the box has been edited since.
   const askedQuestion = useRef("");
+  const questionBox = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     return () => inFlight.current?.abort();
@@ -120,6 +122,38 @@ export default function ChatPanel() {
     }
   }
 
+  // One way onward per failure, and they are not the same way.
+  function failureAction(failure: ChatFailure): StatusAction {
+    switch (failure) {
+      // `/account` is still a placeholder screen, and knowingly so: nothing
+      // emits 429 until the T-71/T-73 counter lands, so no parent can reach
+      // this CTA yet, and registration (T-8x) is due before the counter is.
+      // Pointing the funnel's conversion step anywhere else would only have
+      // to be undone. If the counter ships first, this href is the thing to
+      // fix with it.
+      case "limit_reached":
+        return { kind: "link", labelKey: "errors.limit_reached.action", href: "/account" };
+      // 422 is the backend refusing this exact wording, so re-posting it
+      // would fail identically, forever. The copy asks the parent to write
+      // the question again; this button is what makes that possible, and it
+      // sends nothing.
+      case "invalid_question":
+        return {
+          kind: "retry",
+          labelKey: "errors.invalid_question.action",
+          onRetry: () => questionBox.current?.focus(),
+        };
+      // Everything else failed for a reason the same question may well
+      // survive, so it re-sends what was actually asked.
+      default:
+        return {
+          kind: "retry",
+          labelKey: "errors.retry",
+          onRetry: () => void ask(askedQuestion.current),
+        };
+    }
+  }
+
   const busy = state.phase === "waiting" || state.phase === "answering";
   const trimmed = question.trim();
 
@@ -139,6 +173,7 @@ export default function ChatPanel() {
         </label>
         <textarea
           id="chat-question"
+          ref={questionBox}
           className="chat-form__input"
           rows={3}
           value={question}
@@ -153,8 +188,19 @@ export default function ChatPanel() {
       {/* One region for every state, with its height reserved in CSS, so
           moving between them never reflows the form above (acceptance
           criterion 3). `polite` rather than `assertive`: an answer arriving
-          should not cut off whatever a screen reader is mid-sentence on. */}
-      <div className="chat-status" aria-live="polite">
+          should not cut off whatever a screen reader is mid-sentence on.
+
+          `aria-busy` only while the answer is growing: each chunk rewrites
+          the same paragraph, and a live region that changes six times is read
+          from the top six times. Busy holds the announcement back until the
+          answer has settled, so it is read once. The typing state is outside
+          that window on purpose - "Asystent pisze" is the one thing worth
+          announcing the moment it appears. */}
+      <div
+        className="chat-status"
+        aria-live="polite"
+        aria-busy={state.phase === "answering"}
+      >
         {state.phase === "empty" && (
           <StatusMessage
             tone="info"
@@ -174,15 +220,7 @@ export default function ChatPanel() {
             tone={TONE_BY_FAILURE[state.failure]}
             titleKey={`errors.${state.failure}.title`}
             descriptionKey={`errors.${state.failure}.description`}
-            action={
-              state.failure === "limit_reached"
-                ? { kind: "link", labelKey: "errors.limit_reached.action", href: "/account" }
-                : {
-                    kind: "retry",
-                    labelKey: "errors.retry",
-                    onRetry: () => void ask(askedQuestion.current),
-                  }
-            }
+            action={failureAction(state.failure)}
           />
         )}
       </div>
