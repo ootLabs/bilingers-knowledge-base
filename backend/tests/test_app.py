@@ -46,9 +46,15 @@ def test_preflight_is_answered(client: TestClient) -> None:
 
 
 def test_routers_are_wired_once() -> None:
-    """A router included twice silently shadows routes and is easy to miss."""
-    paths = [route.path for route in app.routes]
-    assert len(paths) == len(set(paths))
+    """A router included twice silently shadows routes and is easy to miss.
+
+    Compared per method, not per path: one path legitimately answers several
+    verbs (`/api/panel/users` lists and creates), and comparing paths alone
+    would report that as a duplicate while still missing a router included
+    twice with different methods.
+    """
+    endpoints = [(route.path, method) for route in app.routes for method in route.methods]
+    assert len(endpoints) == len(set(endpoints))
 
 
 def test_get_session_yields_and_always_closes(monkeypatch: pytest.MonkeyPatch) -> None:

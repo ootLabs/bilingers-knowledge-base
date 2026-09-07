@@ -12,11 +12,11 @@ Free educational app giving parents reliable knowledge about raising a bilingual
 
 The repository is a **skeleton**. Deliberately absent, not to be added without an explicit request:
 
-no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no auth · no quiz · no certificates · no admin panel
+no vector database · no embeddings/RAG · no LLM SDK · no model API calls · no API keys · no parent accounts · no quiz · no certificates · no admin panel screens
 
 What exists: three containers that build and talk to each other, health endpoints, the core relational data model under Alembic migrations, a stubbed streaming `POST /chat` (writes the question, streams back a fixed placeholder, no model call), the cost ledger with its configurable price list and reporting views (nothing writes a measurement yet, because nothing calls a model), a frontend routing skeleton with a Polish-only translation layer and design tokens, the parent-facing chat screen built on top of it with its loading, error, empty and limit states plus dedicated 404 and 500 screens (every other route still holds placeholder copy), a test suite with CI, and the documentation frame. `docs/llm/` describes the intended AI layer - design notes, not code, with `cost-control.md` the one exception: its measurement half is built.
 
-"No auth" still holds despite the `users` table: it has a password hash column and no hashing, no login, no sessions. The entity is modelled, authentication is not.
+Authentication exists for the **panel only** (T-82): `panel_users` and its own login, sessions, roles and password resets, all under `/api/panel`. The parent-facing `users` table is untouched - a password hash column, no hashing, no login, no sessions. Two tracks, two threat models; do not merge them.
 
 "No quiz" and "no certificates" still hold despite the `/quiz` route, and "no auth" despite `/account`: each renders one heading and one placeholder paragraph through `PlaceholderRoute`. No questions, no scoring, nothing issued, no login. The routes are reserved, the features are not.
 

@@ -8,6 +8,13 @@ module belongs in the imports below or it is invisible to migrations.
 from app.models.base import PERSONAL_DATA, Base, TimestampMixin, personal_data_columns
 from app.models.chat import ChatSession, Query
 from app.models.knowledge import KnowledgeBaseVersion, KnowledgeGap, KnowledgeGapStatus
+from app.models.panel import (
+    PanelLoginAttempt,
+    PanelPasswordReset,
+    PanelRole,
+    PanelSession,
+    PanelUser,
+)
 from app.models.user import User
 
 __all__ = [
@@ -17,6 +24,11 @@ __all__ = [
     "KnowledgeBaseVersion",
     "KnowledgeGap",
     "KnowledgeGapStatus",
+    "PanelLoginAttempt",
+    "PanelPasswordReset",
+    "PanelRole",
+    "PanelSession",
+    "PanelUser",
     "Query",
     "TimestampMixin",
     "User",

@@ -39,6 +39,25 @@ def fetch(url: str, timeout: int = 10) -> tuple[int, str]:
         return response.status, response.read().decode("utf-8", errors="replace")
 
 
+def post_json(url: str, payload: dict, timeout: int = 10) -> tuple[int, str]:
+    """POST JSON and return the status even when it is an error status.
+
+    urllib raises on 4xx, but a 4xx is exactly what some checks expect: an
+    endpoint that refuses bad input is working, and one that accepts it is not.
+    """
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"User-Agent": "bilingers-smoke", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", errors="replace")
+
+
 def wait_for(url: str, label: str) -> bool:
     """Poll until the URL answers, or give up after TIMEOUT seconds."""
     deadline = time.monotonic() + TIMEOUT
@@ -82,6 +101,16 @@ def check_backend() -> None:
 
     status, body = fetch(f"{BACKEND_URL}/openapi.json")
     check("openapi schema is served", "/health" in json.loads(body)["paths"])
+
+    # A 401 here means the request reached the database: the account has to be
+    # looked up before anything can refuse it, so this also proves the panel
+    # migration ran. It leaves one row in the login audit, which is correct -
+    # somebody really did try to log in with an account that does not exist.
+    status, body = post_json(
+        f"{BACKEND_URL}/api/panel/sessions",
+        {"email": "smoke@bilingers.test", "password": "nie-ma-takiego-konta"},
+    )
+    check("panel refuses an unknown account", status == 401, f"got {status}: {body}")
 
 
 def check_frontend() -> None:
