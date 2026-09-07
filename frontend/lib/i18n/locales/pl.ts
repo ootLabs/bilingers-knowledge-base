@@ -22,7 +22,79 @@ const pl = {
   },
   chat: {
     heading: "Czat",
-    placeholder: "Rozmowa z asystentem pojawi się tutaj wkrótce.",
+    inputLabel: "Twoje pytanie",
+    inputPlaceholder: "Na przykład: od kiedy mówić do dziecka w dwóch językach?",
+    submit: "Zapytaj",
+    answerLabel: "Odpowiedź asystenta",
+    typing: "Asystent pisze",
+    empty: {
+      // Deliberately just an empty state. The assistant's self-description
+      // and the suggested opening questions Justyna asked for belong to the
+      // entry screen designed in T-61, which is still awaiting review;
+      // writing them here would be guessing at copy someone else owns.
+      title: "Nie zadano jeszcze pytania",
+      description:
+        "Napisz pytanie o wychowanie dziecka w dwóch językach. Odpowiedź pojawi się tutaj.",
+    },
+    // snake_case against the camelCase used everywhere else in this file,
+    // because these are not ours to name: the backend streams these exact
+    // dot paths one per line (see `stream_placeholder_answer`) and the
+    // frontend resolves them. Renaming one here silently drops a fragment
+    // of the answer.
+    placeholder_answer: {
+      chunk_0: "To jest odpowiedź zastępcza. ",
+      chunk_1: "Asystent nie korzysta jeszcze z bazy wiedzy fundacji ",
+      chunk_2: "ani z żadnego modelu językowego. ",
+      chunk_3: "Sprawdzamy tutaj wyłącznie to, ",
+      chunk_4: "czy odpowiedź pojawia się poprawnie fragment po fragmencie. ",
+      chunk_5: "Prawdziwe odpowiedzi przyjdą w kolejnym etapie pracy.",
+    },
+  },
+  // Keyed by the failure vocabulary in lib/api-client.ts, which in turn
+  // mirrors the backend's `detail` keys. Same snake_case reasoning as above:
+  // these names come from the API contract, not from this file.
+  errors: {
+    retry: "Spróbuj ponownie",
+    unreachable: {
+      title: "Nie udało się połączyć",
+      description:
+        "Nie mogliśmy teraz połączyć się z asystentem. Sprawdź połączenie z internetem i spróbuj ponownie.",
+    },
+    database_unavailable: {
+      title: "Asystent jest chwilowo niedostępny",
+      description: "To krótka przerwa po naszej stronie. Spróbuj ponownie za moment.",
+    },
+    invalid_question: {
+      title: "Nie możemy przyjąć tego pytania",
+      description: "Wpisz je jeszcze raz, krótszym i prostszym zdaniem.",
+      // Its own label rather than the shared "Spróbuj ponownie": the backend
+      // refused this exact wording, so the only thing that helps is writing
+      // it again, and the button has to say so.
+      action: "Popraw pytanie",
+    },
+    // Not phrased as a fault and not phrased in the second person singular
+    // with a gendered verb form: T-61 calls this the main conversion point
+    // of the whole funnel, reached at peak interest, so it explains the
+    // benefit instead of telling the parent off.
+    limit_reached: {
+      title: "To już wszystkie pytania na teraz",
+      description:
+        "Załóż darmowe konto, żeby pytać dalej i wracać do swoich rozmów. Zajmuje to chwilę i nic nie kosztuje.",
+      action: "Załóż darmowe konto",
+    },
+  },
+  notFound: {
+    heading: "Nie ma takiej strony",
+    title: "Sprawdź adres",
+    description: "Strona, której szukasz, mogła zmienić adres albo nigdy jej tu nie było.",
+    action: "Wróć na stronę główną",
+  },
+  serverError: {
+    heading: "Coś poszło nie tak",
+    title: "Nie udało się wyświetlić tej strony",
+    description: "To błąd po naszej stronie, nie po twojej. Spróbuj otworzyć stronę ponownie.",
+    retry: "Wyświetl ponownie",
+    action: "Wróć na stronę główną",
   },
   quiz: {
     heading: "Quiz",

@@ -1,8 +1,7 @@
 import Link from "next/link";
 
+import { API_URL } from "@/lib/api-client";
 import { getTranslations } from "@/lib/i18n";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function Home() {
   const t = getTranslations();

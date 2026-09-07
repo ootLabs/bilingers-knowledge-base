@@ -1,14 +1,19 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import ChatPage from "./page";
 
-// Rendering itself is covered by PlaceholderRoute.test.tsx, this only
-// checks that this route wires up the chat translation keys, not someone
-// else's.
+// The panel's own behavior is covered by ChatPanel.test.tsx. This only
+// checks the route renders the chat heading and mounts the panel.
+vi.mock("./ChatPanel", () => ({
+  default: () => <div data-testid="chat-panel" />,
+}));
+
 describe("chat route", () => {
-  it("renders the chat heading", () => {
+  it("renders the chat heading and the panel", () => {
     render(<ChatPage />);
+
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Czat");
+    expect(screen.getByTestId("chat-panel")).toBeInTheDocument();
   });
 });

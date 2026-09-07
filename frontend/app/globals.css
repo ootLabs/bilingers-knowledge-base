@@ -50,6 +50,15 @@
      consumes are listed here, add the next one alongside its first
      consumer rather than filling out a full scale ahead of need. */
   --color-text-muted: #666666;
+  /* Error accent for T-63's failure states. T-03 derived no semantic
+     status colors, so this is ours, same as the spacing scale above.
+     Used ONLY as a border (see .status-message--error), never as text
+     on a background, so the threshold that applies is WCAG 1.4.11's
+     3:1 for non-text UI components, not 4.5:1. This value clears that
+     on white (~6.5:1) but not on the dark surfaces (~2.6:1 against
+     --color-bg-muted at #1e1e1e), so it is overridden in the dark mode
+     block below rather than carried over. Keep it off text. */
+  --color-danger: #b3261e;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
@@ -63,7 +72,17 @@
     --color-bg-muted: #1e1e1e;
     --color-text: #f2f2f2;
     --color-text-muted: #9a9a9a;
+    /* The light mode red is ~2.6:1 against --color-bg-muted here, under the
+       3:1 WCAG 1.4.11 threshold a border has to clear, so the error tone
+       would all but vanish on the dark surface it sits on. This lighter red
+       clears it with room to spare (~7.3:1). Ours to pick, same as the light
+       value: T-03 derived no status colors. Still border-only. */
+    --color-danger: #ff8a80;
     /* Brand colors (primary/secondary/accent) are reused unchanged here.
+       That now includes --color-secondary as the limit tone's border
+       (.status-message--limit), which is ~1.9:1 here: the tone reads as a
+       plain divider in dark mode and only the copy carries the meaning.
+       Left as is deliberately, it is the same open T-03 question below.
        Their contrast against this dark background has not been checked.
        Note the light mode default above already fails WCAG AA for
        --color-primary, see the KNOWN ISSUE note at the top of this file;
@@ -163,4 +182,153 @@ a {
 
 .cta-button:hover {
   opacity: 0.9;
+}
+
+/* T-63 state surfaces: loading, error, empty and limit.
+ *
+ * These reuse the tokens above rather than introducing a palette of their
+ * own. Tone is carried by a left border plus the copy, never by text color:
+ * --color-primary already fails AA on white (see the KNOWN ISSUE note at
+ * the top of this file), so tinting status text would spread that debt
+ * instead of containing it, and color alone is not an accessible signal
+ * anyway. */
+.status-message {
+  padding: var(--space-4);
+  background: var(--color-bg-muted);
+  border-left: 4px solid var(--color-text-muted);
+  border-radius: var(--space-2);
+}
+
+.status-message--error {
+  border-left-color: var(--color-danger);
+}
+
+.status-message--limit {
+  border-left-color: var(--color-secondary);
+}
+
+.status-message__title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.1rem;
+}
+
+.status-message__description {
+  margin: 0;
+}
+
+.status-message .cta-button {
+  margin-top: var(--space-3);
+}
+
+.status-message__fallback {
+  margin-top: var(--space-4);
+}
+
+/* .cta-button was written for links (see above). A <button> needs the
+   browser's own chrome removed before it matches them. */
+button.cta-button {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cta-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.chat-form__label {
+  font-weight: 500;
+}
+
+.chat-form__input {
+  width: 100%;
+  padding: var(--space-3);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--space-2);
+  /* Vertical only: horizontal resize inside a max-width column just leaves
+     the field narrower than its container with no way back. */
+  resize: vertical;
+}
+
+/* Acceptance criterion 3, the layout must not jump between states. The
+ * region is below the form, so growth cannot push the form around, and this
+ * floor stops it collapsing to nothing in the gap between one state leaving
+ * and the next arriving. Roughly the height of the tallest short state (a
+ * title, two lines of copy and a button); a long answer grows past it, which
+ * is fine because nothing sits underneath. */
+.chat-status {
+  margin-top: var(--space-5);
+  min-height: 9rem;
+}
+
+.chat-answer__label {
+  margin: 0 0 var(--space-2);
+  font-size: 1.1rem;
+}
+
+.chat-answer__body {
+  margin: 0;
+  /* The answer streams in fragment by fragment, so preserve the whitespace
+     that arrives with it instead of collapsing runs of spaces between two
+     chunks into nothing. */
+  white-space: pre-wrap;
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.typing-indicator__dots {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.typing-indicator__dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  background: currentColor;
+  border-radius: 50%;
+  /* Only opacity animates. Animating size or position would move the line
+     on every frame, which is the layout shift criterion 3 rules out. */
+  animation: typing-pulse 1.2s ease-in-out infinite;
+}
+
+.typing-indicator__dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator__dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-indicator__dots span {
+    animation: none;
+    opacity: 0.6;
+  }
 }

@@ -6,9 +6,9 @@ import PlaceholderRoute from "./PlaceholderRoute";
 describe("PlaceholderRoute", () => {
   it("renders the translated heading and placeholder copy for the given keys", () => {
     render(
-      <PlaceholderRoute headingKey="chat.heading" placeholderKey="chat.placeholder" />,
+      <PlaceholderRoute headingKey="quiz.heading" placeholderKey="quiz.placeholder" />,
     );
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Czat");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Quiz");
     expect(screen.getByText(/pojawi się tutaj wkrótce/)).toBeInTheDocument();
   });
 });
