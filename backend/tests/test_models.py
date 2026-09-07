@@ -11,10 +11,14 @@ constraint that only exists in Python is not a constraint.
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
-from sqlalchemy import inspect, text
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlalchemy import CheckConstraint, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,6 +41,23 @@ EXPECTED_TABLES = {
     "knowledge_gaps",
     "knowledge_base_versions",
 }
+
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+VERSIONS_DIR = BACKEND_ROOT / "alembic" / "versions"
+# Matches `revision: str = "abc123"` and the plain `revision = "abc123"` form.
+REVISION_ID = re.compile(r'^revision(?::\s*str)?\s*=\s*"([^"]+)"', re.MULTILINE)
+
+
+def script_directory() -> ScriptDirectory:
+    """Alembic's view of the migration history, with no database involved.
+
+    Built without `alembic.ini` on purpose: only `script_location` matters here,
+    and skipping the file avoids dragging its logging configuration in.
+    """
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    return ScriptDirectory.from_config(config)
 
 
 def column(model: type, name: str):
@@ -72,8 +93,22 @@ class TestAnonymousSessions:
 
 class TestQueryLedger:
     def test_records_everything_needed_to_report_cost(self) -> None:
-        for name in ("model", "input_tokens", "output_tokens", "cost_usd", "duration_ms"):
+        for name in (
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "cost_usd",
+            "cost_pln",
+            "fx_rate_pln_per_usd",
+            "pricing_version",
+            "duration_ms",
+        ):
             assert name in Query.__table__.columns
+
+    def test_the_foundation_facing_amount_is_in_pln(self) -> None:
+        """USD is kept for reconciling the provider invoice, but the figure the
+        foundation approves is in its own currency, not converted at read time."""
+        assert column(Query, "cost_pln").type.python_type is Decimal
 
     def test_cost_is_fixed_point(self) -> None:
         """Money reported to the foundation must not accumulate float error."""
@@ -87,6 +122,15 @@ class TestQueryLedger:
     def test_answer_requires_a_base_version(self) -> None:
         names = {constraint.name for constraint in Query.__table__.constraints}
         assert "queries_answer_requires_kb_version" in names
+
+    def test_cost_carries_its_attribution_and_provenance(self) -> None:
+        """Declared here; that each one actually fires is in `test_usage.py`."""
+        names = {constraint.name for constraint in Query.__table__.constraints}
+        assert {
+            "queries_cost_requires_model",
+            "queries_cost_requires_pricing_provenance",
+            "queries_measurements_non_negative",
+        } <= names
 
     def test_a_referenced_base_version_cannot_be_deleted(self) -> None:
         """Declared here; that it actually fires is a database-level test below."""
@@ -143,6 +187,49 @@ class TestPersonalDataRegistry:
         assert column(KnowledgeGap, "question").info.get("personal_data") is True
 
 
+class TestMigrationHistory:
+    """Guards the two ways parallel branches break the migration chain.
+
+    Both are cheap to cause and expensive to notice: two people cutting from the
+    same head reach for the same next identifier, and the damage only shows up
+    when the branches meet. Neither test needs a database, so they run even with
+    nothing started.
+    """
+
+    def test_no_two_migrations_declare_the_same_revision_id(self) -> None:
+        """Reads the files rather than asking Alembic, because Alembic is not
+        strict about this: a duplicate id is a `UserWarning`, after which one of
+        the two migrations quietly disappears from the history and the tables it
+        was supposed to create are never made. Nothing else would notice."""
+        seen: dict[str, str] = {}
+        collisions: list[str] = []
+        for path in sorted(VERSIONS_DIR.glob("*.py")):
+            match = REVISION_ID.search(path.read_text(encoding="utf-8"))
+            assert match is not None, f"{path.name} declares no revision id"
+            revision = match.group(1)
+            if revision in seen:
+                collisions.append(f"{revision} in {seen[revision]} and {path.name}")
+            seen[revision] = path.name
+
+        assert collisions == [], (
+            "two migrations claim the same revision id; give the newer one its own "
+            "and point its down_revision at the other: " + "; ".join(collisions)
+        )
+
+    def test_the_history_has_exactly_one_head(self) -> None:
+        """Two heads make `alembic upgrade head` fail outright, and the backend
+        container runs exactly that before uvicorn, so the symptom is a service
+        that never answers and a log repeating the same Alembic error. Happens
+        whenever two migrations name the same `down_revision`, even with
+        different ids of their own."""
+        heads = script_directory().get_heads()
+
+        assert len(heads) == 1, (
+            f"migration history has {len(heads)} heads ({', '.join(heads)}); "
+            "the one merging second should point its down_revision at the other"
+        )
+
+
 @pytest.mark.integration
 class TestMigrations:
     def test_every_table_exists_after_migrating(self, migrated_database: None) -> None:
@@ -154,6 +241,49 @@ class TestMigrations:
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
         assert revision
+
+    def test_the_check_constraints_on_queries_match_the_model(
+        self, migrated_database: None
+    ) -> None:
+        """Every one of these is written twice: once as a `CheckConstraint` here
+        and once as SQL in a migration. `alembic check` does not compare check
+        constraints at all, so without this a database built from the metadata
+        and one built from migrations could enforce different rules on a figure
+        reported to a funder, with both test suites green.
+        """
+        declared = {
+            constraint.name
+            for constraint in Query.__table__.constraints
+            if isinstance(constraint, CheckConstraint)
+        }
+        with engine.connect() as connection:
+            applied = set(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'queries'::regclass AND contype = 'c'"
+                    )
+                ).scalars()
+            )
+
+        assert declared == applied
+
+    def test_no_constraint_is_left_unvalidated(self, migrated_database: None) -> None:
+        """An unvalidated constraint is enforced going forward but never checked
+        against what is already stored, so the model claims a guarantee the
+        table does not hold and `pg_dump` stops matching the metadata. Revision
+        The cost ledger revision clears the pre-existing partial costs instead."""
+        with engine.connect() as connection:
+            unvalidated = list(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'queries'::regclass AND NOT convalidated"
+                    )
+                ).scalars()
+            )
+
+        assert unvalidated == []
 
 
 @pytest.mark.integration
@@ -175,6 +305,12 @@ class TestRealSchema:
             input_tokens=120,
             output_tokens=40,
             cost_usd=Decimal("0.000345"),
+            # The database refuses a partial measurement: an amount in PLN
+            # is only reproducible together with the rate and the price list
+            # that produced it (queries_cost_requires_pricing_provenance).
+            cost_pln=Decimal("0.001397"),
+            fx_rate_pln_per_usd=Decimal("4.050000"),
+            pricing_version="test-2026-08",
             duration_ms=850,
         )
         db_session.add(query)
