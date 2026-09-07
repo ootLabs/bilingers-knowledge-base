@@ -1,7 +1,7 @@
 """Panel accounts: editors, sessions, the login audit and password resets
 
 Revision ID: 6059ee904da3
-Revises: 0001
+Revises: a2363c74818b
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "6059ee904da3"
-down_revision: str | None = "0001"
+down_revision: str | None = "a2363c74818b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -54,7 +54,7 @@ Five tables, in `backend/app/models/`. Each one exists because a product decisio
 |---|---|---|
 | `users` | The larger question quota for someone with an account | Email uniqueness is a database constraint. No authentication logic yet |
 | `chat_sessions` | Counting questions, account or not | `user_id` is nullable; the opaque `token` is what gets counted |
-| `queries` | Cost reporting and quality regression | Append-only. Question, answer, model, tokens, cost, duration |
+| `queries` | Cost reporting and quality regression | Append-only. Question, answer, model, tokens, cost in USD and PLN with the rate and price list behind it, duration |
 | `knowledge_base_versions` | Tracing an answer to the exact content behind it | Version, ingest time, record count, source checksum |
 | `knowledge_gaps` | The queue of what the base could not answer | Survives deletion of the query it came from |
 
@@ -63,10 +63,13 @@ users 1--0..n chat_sessions 1--0..n queries 0..1--1 knowledge_gaps
                                        n--0..1 knowledge_base_versions
 ```
 
-Two constraints carry decisions rather than hygiene, so they live in the database instead of in application code:
+Several constraints carry decisions rather than hygiene, so they live in the database instead of in application code:
 
 - `chat_sessions.user_id` is **nullable**. Anonymous parents have to be countable or the quota is decorative.
 - `queries` carries `CHECK (answer IS NULL OR knowledge_base_version_id IS NOT NULL)`. An answer that cannot name the base version behind it becomes unexplainable the moment the base changes, and the base is expected to change indefinitely.
+- `queries` also refuses a cost with no model to attribute it to (`queries_cost_requires_model`), a cost without the rate and price list that produced it (`queries_cost_requires_pricing_provenance`), and any negative measurement (`queries_measurements_non_negative`). "Summable per model" and "reproducible in PLN" are promises the report makes to the foundation, so they are enforced where the rows are, not where the writer is.
+
+Two views, `query_costs` and `query_costs_monthly`, are the read side. They carry no personal data by construction, so a monthly figure can be handed to the foundation without a stripping step. See `docs/llm/cost-control.md`.
 
 **Personal data** is marked at the column level with `info=PERSONAL_DATA`, and `personal_data_columns()` derives the list from the metadata. Retention periods are deliberately not implemented: they depend on GDPR decisions that have not been made yet.
 
@@ -104,6 +107,11 @@ The intended erasure model is **scrubbing marked columns rather than deleting ro
 | 2026-08-28 | No registration form and no self-service password reset; an administrator creates accounts and issues one-time tokens | The panel holds three to five accounts for the life of the project, so a registration form is attack surface bought for nothing. A "forgot my password" endpoint would mint a token with no way to deliver it: there is no mail path yet. Revisit the second half when mail exists |
 | 2026-08-28 | Five failed logins lock the account for fifteen minutes; every attempt is recorded, including for addresses that match no account | An attack on a five-account panel looks like repeated failures against addresses that do not exist, and that pattern is invisible if only real accounts are logged. The counter lives on the account, not in the audit table, so pruning the audit cannot quietly disable the limit. **Superseded 2026-09-02** |
 | 2026-08-26 | `ChatRequest.session_token` requires 32-64 lowercase hex characters | The token is the only key to a conversation and a future D5 quota; `min_length=1` let two unrelated clients collide into the same `ChatSession` and its `PERSONAL_DATA`-marked questions by both picking a short token |
+| 2026-08-31 | Cost stored in both USD and PLN, with the exchange rate and price list version on every row | The provider invoices in USD and the foundation approves PLN (D11), so both are real figures rather than one derived from the other. Converting at report time would silently restate history, because the rate moves; the row keeps the rate that actually applied |
+| 2026-08-31 | Model prices live in a JSON file read at runtime, not in code or a database table | A provider price change must not need a deploy, and a table would need an admin surface that does not exist. The file re-reads on change; a broken edit fails the next request loudly instead of quietly serving the prices it replaced |
+| 2026-08-31 | A measurement is written by one conditional `UPDATE`, in a session the writer owns | A read-then-write guard lets two concurrent writers both pass it and one silently replace a cost that was already reported; the `UPDATE`'s own `WHERE` cannot be raced. The session is not the caller's, because usage is only known after the stream ends, when the request session is closed, and committing or rolling back someone else's transaction would discard whatever they had pending |
+| 2026-08-31 | The cost ledger revision clears pre-existing costs that have no rate behind them, rather than adding the provenance constraint `NOT VALID` | A cost with no rate and no price list version cannot be reproduced, so it was never evidence and nothing is lost by clearing it, whereas inventing a retroactive rate would manufacture some. An unvalidated constraint would also leave `pg_dump` permanently disagreeing with `app.models.chat`, so a database built from metadata and one built from migrations would enforce different rules |
+| 2026-08-31 | Reporting is SQL views plus a script, not an API endpoint | There is no admin panel and no auth, so an endpoint exposing spend would be a public one. A view is also what the foundation's own calculation (T-02.2) can be corrected from, via `scripts/cost_report.py --csv` |
 | 2026-09-02 | The frontend reduces every backend failure to a closed set of four `ChatFailure` keys, and never reads a failed response's body | A failing backend's body can name the model provider or quote the system prompt, which T-63 forbids showing a parent and T-52 treats as an attack surface. A status the backend starts returning that is not in the set degrades to `unreachable` instead of reaching the screen as an unhandled shape |
 | 2026-09-02 | `app/error.tsx` never binds the thrown `Error` it is handed | Its message and digest are the likeliest carriers of a stack trace, an internal hostname or a provider name anywhere in the frontend. Not destructuring it is a structural guarantee; remembering not to render it is not |
 | 2026-09-02 | 429 is mapped to the limit state before anything emits it | The anonymous quota is T-71/T-73, but T-63 owns what a parent sees when it trips, and a state nobody can reach is a state nobody has tested. The counter lands later without touching the client |

@@ -21,6 +21,8 @@ FastAPI service. Layering rule (see [`../conventions.md`](../conventions.md)): r
 | `backend/app/services/panel_errors.py` | `PanelServiceUnavailable`, `unavailable_on_database_failure` - the decorator that keeps a driver exception from crossing the panel's service boundary; every panel service function a router or dependency calls carries it |
 | `backend/app/services/chat.py` | `get_or_create_chat_session`, `record_query`, `stream_placeholder_answer`, `ChatServiceUnavailable`, `InvalidChatInput` - the streaming pipe from T-12, no RAG/model call yet |
 | `backend/app/schemas/panel.py` | `PanelLoginRequest`, `PanelSessionResponse`, `PanelUserResponse`, `PanelUserCreateRequest`, `PanelUserUpdateRequest`, `PasswordResetResponse`, `PasswordResetConfirmRequest`, `PasswordChangeRequest`; password length rules and the address pattern (which excludes control characters, NUL included) live here |
+| `backend/app/services/pricing.py` | The configurable price list: `PriceList`, `ModelPrice`, `get_price_list` (the one entry point; re-reads the file when its bytes change), `parse_price_list`, `reset_price_list_cache`, `PricingConfigError`, `UnknownModelPrice` |
+| `backend/app/services/usage.py` | Cost ledger writer: `TokenUsage`, `PricedUsage`, `price_usage` (USD and PLN), `record_usage` (one conditional `UPDATE` by query id in a session of its own, so a measurement is never overwritten), `InvalidUsage`, `UsageAlreadyRecorded`, `UsageNotRecorded` |
 | `backend/app/schemas/chat.py` | `ChatRequest` (`question`, `session_token`); rejects blank/oversized input |
 | `backend/requirements.txt` | Pinned runtime dependencies |
 | `backend/requirements-dev.txt` | Test tooling on top of the runtime pins: pytest, pytest-cov, httpx |
@@ -36,7 +38,7 @@ Every table lives here; nothing outside `models/` defines schema. Importing the 
 | `backend/app/models/base.py` | `Base`, `TimestampMixin`, the `PERSONAL_DATA` column marker, `personal_data_columns()` |
 | `backend/app/models/panel.py` | `PanelUser` (`panel_users`, nullable `password_hash`, lockout counters), `PanelSession`, `PanelLoginAttempt`, `PanelPasswordReset`, `PanelRole` - the panel's own accounts, separate from `users` |
 | `backend/app/models/user.py` | `User` (`users`) - email unique in the database, `password_hash`, `email_verified_at` |
-| `backend/app/models/chat.py` | `ChatSession` (`chat_sessions`, nullable `user_id` for anonymous use), `Query` (`queries`, the token/cost ledger and the `queries_answer_requires_kb_version` check) |
+| `backend/app/models/chat.py` | `ChatSession` (`chat_sessions`, nullable `user_id` for anonymous use), `Query` (`queries`, the token/cost ledger in USD and PLN, plus the `queries_answer_requires_kb_version`, `queries_cost_requires_model`, `queries_cost_requires_pricing_provenance` and `queries_measurements_non_negative` checks) |
 | `backend/app/models/knowledge.py` | `KnowledgeBaseVersion` (`knowledge_base_versions`), `KnowledgeGap` (`knowledge_gaps`), `KnowledgeGapStatus` |
 
 ## Migrations
@@ -45,16 +47,17 @@ Alembic owns every application table. `db/init/` is container bootstrap and neve
 
 ```bash
 docker compose exec backend alembic upgrade head          # apply (the backend also does this on start)
-docker compose exec backend alembic revision -m "..."     # new revision, then hand-write the ops
+docker compose exec backend alembic revision -m "..."     # new revision, then hand-write the ops (never the id)
 docker compose exec backend alembic current               # which revision is applied
 ```
 
 | Path | What's in it |
 |---|---|
-| `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, logging. No `sqlalchemy.url` on purpose |
+| `backend/alembic.ini` | Alembic config; `script_location`, `prepend_sys_path`, `file_template` (date in the filename, generated hash as the revision id), logging. No `sqlalchemy.url` on purpose |
 | `backend/alembic/env.py` | Reads `DATABASE_URL` via `app.config`, sets `target_metadata` from `app.models.Base` |
 | `backend/alembic/versions/0001_core_data_model.py` | First revision: the five tables, the `knowledge_gap_status` enum, indexes and constraints |
-| `backend/alembic/versions/6059ee904da3_panel_authentication.py` | Panel accounts: `panel_users`, `panel_sessions`, `panel_login_attempts`, `panel_password_resets`, the `panel_user_role` enum. Non-numeric revision id: `feat/cost-ledger` also branched from `0001` and claimed `"0002"` first |
+| `backend/alembic/versions/20260831_a2363c74818b_cost_ledger_pln_and_report_views.py` | Adds `queries.cost_pln`, `fx_rate_pln_per_usd`, `pricing_version`, the three cost check constraints, and the `query_costs` / `query_costs_monthly` reporting views |
+| `backend/alembic/versions/6059ee904da3_panel_authentication.py` | Panel accounts: `panel_users`, `panel_sessions`, `panel_login_attempts`, `panel_password_resets`, the `panel_user_role` enum. Non-numeric revision id, chained onto the cost ledger revision: `feat/cost-ledger` branched from `0001` as well |
 
 ## Tests
 
@@ -62,11 +65,11 @@ docker compose exec backend alembic current               # which revision is ap
 
 | Path | What's in it |
 |---|---|
-| `backend/tests/conftest.py` | `StubSession`, `client` (database stubbed), `raw_client`, `database_available`, `require_database`, `db_session` (rolls back), `migrated_database` (skips unless every mapped table is present), `panel_db` (in-memory SQL), `panel_client`, `postgres_panel_client`, `cheap_password_hashing`, `make_panel_user`, `attempts_for`, `log_in` |
+| `backend/tests/conftest.py` | `StubSession`, `client` (database stubbed), `raw_client`, `database_available`, `require_database`, `db_session` (rolls back), `migrated_database` (skips unless every mapped table is present), `committed_token` and `committed_query` (commit for real, then clean up), `BASELINE_USAGE` + `priced_usage`, `panel_db` (in-memory SQL), `panel_client`, `postgres_panel_client`, `cheap_password_hashing`, `make_panel_user`, `attempts_for`, `log_in` |
 | `backend/tests/test_config.py` | `Settings` parsing: CORS origin splitting, whitespace, empty entries, defaults |
 | `backend/tests/test_health.py` | `/health` and `/health/db` against a stub, plus integration tests against real PostgreSQL |
 | `backend/tests/test_app.py` | Root route, OpenAPI schema, CORS headers, route uniqueness, `get_session` lifecycle |
-| `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, plus integration round trips against real PostgreSQL |
+| `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, ORM check constraints matching the migrated database, one migration head and no duplicate revision ids, plus integration round trips against real PostgreSQL |
 | `backend/tests/test_security.py` | Hashing and tokens: salting, the missing-hash case, the bcrypt byte limit |
 | `backend/tests/test_panel_auth.py` | Login input rules and credentials: what each kind of account that may not get in answers instead |
 | `backend/tests/test_panel_lockout.py` | The per-account lockout: counting failures, locking, recovering, that a deactivated account is never charged (only recorded), and that the counter is read from the locked row rather than from a stale mapped object |
@@ -78,6 +81,9 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/tests/test_cli.py` | `python -m app.cli create-admin` - the bootstrap command |
 | `backend/tests/test_rate_limit.py` | The per-IP login throttle: the sliding window, that stale keys are swept instead of growing the dict forever, and that a throttled flood leaves one audit row per window |
 | `backend/tests/test_chat.py` | Validation, the write-before-stream order, `SQLAlchemyError` to `503`, plus integration tests proving real persistence and session reuse |
+| `backend/tests/test_pricing.py` | Price list parsing and refusals, exact decimals, reload after an edit, loud failure on a broken one, the shipped example still parsing |
+| `backend/tests/test_usage.py` | Cost arithmetic in USD and PLN, `LedgerSession` double, write-once under concurrency, rollback leaving a row retriable, plus integration tests firing each cost constraint |
+| `backend/tests/test_cost_reporting.py` | The `query_costs` and `query_costs_monthly` views: view inventory, no personal data, honest counts, Warsaw-time buckets read from the view itself |
 
 ## Where new things go
 
@@ -89,4 +95,5 @@ docker compose exec backend alembic current               # which revision is ap
 | A database table | `backend/app/models/<domain>.py` | Import it in `models/__init__.py`, then add an Alembic revision |
 | Request/response shape | `backend/app/schemas/<domain>.py` | Create the folder with the first file |
 | A setting | `backend/app/config.py` | Also add it to `.env.example` |
+| A model price | `backend/pricing.json` (not the code) | Copy the shape from `backend/pricing.example.json`; it reloads with no restart |
 | A field holding personal data | wherever it belongs | Mark it `info=PERSONAL_DATA` so `personal_data_columns()` finds it |

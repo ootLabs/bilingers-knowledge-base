@@ -38,6 +38,7 @@ services:
       # so a variable missing from this block is a variable nobody can set.
       PANEL_LOGIN_IP_MAX_ATTEMPTS: ${PANEL_LOGIN_IP_MAX_ATTEMPTS:-20}
       PANEL_LOGIN_IP_WINDOW_MINUTES: ${PANEL_LOGIN_IP_WINDOW_MINUTES:-5}
+      PRICING_FILE: ${PRICING_FILE:-/app/pricing.json}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

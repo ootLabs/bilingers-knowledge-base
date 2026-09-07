@@ -30,6 +30,7 @@ AREAS: list[tuple[str, list[str]]] = [
         [
             "docker-compose.yml",
             ".env.example",
+            "backend/pricing.example.json",
             "backend/Dockerfile",
             "frontend/Dockerfile",
             "db/init/*.sql",
