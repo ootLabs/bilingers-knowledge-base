@@ -20,6 +20,7 @@ between the two, in that order.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -33,6 +34,21 @@ from app.services.document_queries import get_version
 from app.services.documents import DocumentNotFound, VersionDetail, VersionNotFound
 from app.services.knowledge_index import IndexChange, record_index_change
 from app.services.panel_errors import unavailable_on_database_failure
+
+
+@dataclass(frozen=True)
+class Publication:
+    """The published version, and whether this call is what published it.
+
+    The second field exists for the change journal (T-89). Publishing an
+    already published version is deliberately a no-op answering 200, so without
+    this the router cannot tell a real publication from a second click and
+    records both. Two journal lines for one publication is a false answer to
+    the question the journal exists for.
+    """
+
+    version: VersionDetail
+    changed: bool
 
 
 class NotPublished(Exception):
@@ -115,18 +131,21 @@ def publish_version(
     document_id: int,
     version_number: int,
     actor: PanelUser,
-) -> VersionDetail:
+) -> Publication:
     """Put one version in front of parents. All of it, or none of it.
 
     Publishing the version that is already published is not an error and does
     nothing: silence after a click is what makes an editor click again, and a
-    second click must not become a second knowledge base version.
+    second click must not become a second knowledge base version. It comes back
+    with `changed=False`, so it does not become a second journal line either.
     """
     _locked_document(session, document_id)
     version = _version_row(session, document_id, version_number)
 
     if version.status is DocumentStatus.PUBLISHED:
-        return get_version(session, document_id, version_number)
+        return Publication(
+            version=get_version(session, document_id, version_number), changed=False
+        )
 
     current = session.execute(
         select(DocumentVersion)
@@ -170,7 +189,9 @@ def publish_version(
         knowledge_base_version=knowledge_base_version.version,
     )
     session.commit()
-    return get_version(session, document_id, version_number)
+    return Publication(
+        version=get_version(session, document_id, version_number), changed=True
+    )
 
 
 @unavailable_on_database_failure

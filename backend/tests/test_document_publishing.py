@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.audit import AuditAction, PanelAuditEvent
 from app.models.document import DocumentStatus, DocumentVersion
 from app.models.knowledge import KnowledgeBaseVersion
 from app.models.panel import PanelUser
@@ -125,6 +126,16 @@ class TestPublishing:
         assert response.status_code == 200
         assert response.json()["status"] == "published"
         assert len(list(panel_db.execute(select(KnowledgeBaseVersion)).scalars())) == 1
+        # And not a second journal line either. The version went live once, so
+        # a reader of the journal has to see one publication, not two.
+        published_events = list(
+            panel_db.execute(
+                select(PanelAuditEvent).where(
+                    PanelAuditEvent.action == AuditAction.DOCUMENT_PUBLISHED
+                )
+            ).scalars()
+        )
+        assert len(published_events) == 1
 
     def test_publication_tells_the_index_layer_that_the_set_changed(
         self,

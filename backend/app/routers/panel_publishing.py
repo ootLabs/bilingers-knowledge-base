@@ -69,15 +69,19 @@ def publish(
     except PublicationConflict as error:
         raise HTTPException(status_code=409, detail="publication_conflict") from error
 
-    record_event(
-        session,
-        actor=editor,
-        action=AuditAction.DOCUMENT_PUBLISHED,
-        subject_type="document",
-        subject_id=document_id,
-        detail=f"version {version_number}",
-    )
-    return published
+    # Only when this call is what published it. A second click changes nothing,
+    # so a journal line saying it did would read, months later, as two separate
+    # publications of the same version.
+    if published.changed:
+        record_event(
+            session,
+            actor=editor,
+            action=AuditAction.DOCUMENT_PUBLISHED,
+            subject_type="document",
+            subject_id=document_id,
+            detail=f"version {version_number}",
+        )
+    return published.version
 
 
 @router.post(
