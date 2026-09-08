@@ -323,6 +323,9 @@ const pl = {
         account_created: "Utworzenie konta w panelu",
         account_changed: "Zmiana uprawnień konta",
         password_reset_issued: "Wydanie kodu do ustawienia hasła",
+        two_factor_enabled: "Włączenie dodatkowego zabezpieczenia",
+        two_factor_disabled: "Wyłączenie dodatkowego zabezpieczenia",
+        two_factor_reset: "Skasowanie dodatkowego zabezpieczenia przez administratora",
       },
       loading: {
         title: "Wczytujemy dziennik",
