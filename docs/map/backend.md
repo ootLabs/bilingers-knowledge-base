@@ -39,6 +39,7 @@ Every table lives here; nothing outside `models/` defines schema. Importing the 
 | `backend/app/models/panel.py` | `PanelUser` (`panel_users`, nullable `password_hash`, lockout counters), `PanelSession`, `PanelLoginAttempt`, `PanelPasswordReset`, `PanelRole` - the panel's own accounts, separate from `users` |
 | `backend/app/models/user.py` | `User` (`users`) - email unique in the database, `password_hash`, `email_verified_at` |
 | `backend/app/models/chat.py` | `ChatSession` (`chat_sessions`, nullable `user_id` for anonymous use), `Query` (`queries`, the token/cost ledger in USD and PLN, plus the `queries_answer_requires_kb_version`, `queries_cost_requires_model`, `queries_cost_requires_pricing_provenance` and `queries_measurements_non_negative` checks) |
+| `backend/app/models/document.py` | `Document` (`documents`, identity only), `DocumentVersion` (`document_versions`, the immutable content snapshot: title, content, author, change comment, status, the `document_versions_one_published_per_document` partial unique index), `DocumentStatus` |
 | `backend/app/models/knowledge.py` | `KnowledgeBaseVersion` (`knowledge_base_versions`), `KnowledgeGap` (`knowledge_gaps`), `KnowledgeGapStatus` |
 
 ## Migrations
@@ -58,6 +59,7 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/alembic/versions/0001_core_data_model.py` | First revision: the five tables, the `knowledge_gap_status` enum, indexes and constraints |
 | `backend/alembic/versions/20260831_a2363c74818b_cost_ledger_pln_and_report_views.py` | Adds `queries.cost_pln`, `fx_rate_pln_per_usd`, `pricing_version`, the three cost check constraints, and the `query_costs` / `query_costs_monthly` reporting views |
 | `backend/alembic/versions/6059ee904da3_panel_authentication.py` | Panel accounts: `panel_users`, `panel_sessions`, `panel_login_attempts`, `panel_password_resets`, the `panel_user_role` enum. Non-numeric revision id, chained onto the cost ledger revision: `feat/cost-ledger` branched from `0001` as well |
+| `backend/alembic/versions/20260907_ebedc16a4160_document_content_and_versions.py` | Adds `documents` and `document_versions`, the `document_status` enum, and the `document_versions_one_published_per_document` partial unique index enforcing at most one published version per document |
 
 ## Tests
 
@@ -70,6 +72,7 @@ docker compose exec backend alembic current               # which revision is ap
 | `backend/tests/test_health.py` | `/health` and `/health/db` against a stub, plus integration tests against real PostgreSQL |
 | `backend/tests/test_app.py` | Root route, OpenAPI schema, CORS headers, route uniqueness, `get_session` lifecycle |
 | `backend/tests/test_models.py` | Schema guarantees: anonymous sessions, answer-needs-a-base-version, personal-data registry, ORM check constraints matching the migrated database, one migration head and no duplicate revision ids, plus integration round trips against real PostgreSQL |
+| `backend/tests/test_documents.py` | Document/version guarantees (T-84): status defaults to draft, at most one published version per document, version numbers unique per document, deleting a document takes its versions, a referenced knowledge base version cannot be deleted, deleting an author account detaches the version instead of erasing it |
 | `backend/tests/test_security.py` | Hashing and tokens: salting, the missing-hash case, the bcrypt byte limit |
 | `backend/tests/test_panel_auth.py` | Login input rules and credentials: what each kind of account that may not get in answers instead |
 | `backend/tests/test_panel_lockout.py` | The per-account lockout: counting failures, locking, recovering, that a deactivated account is never charged (only recorded), and that the counter is read from the locked row rather than from a stale mapped object |

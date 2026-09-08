@@ -22,6 +22,7 @@ from app.models.base import PERSONAL_DATA, Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.chat import Query
+    from app.models.document import DocumentVersion
 
 
 class KnowledgeGapStatus(StrEnum):
@@ -58,6 +59,10 @@ class KnowledgeBaseVersion(Base):
     # never fires and deleting a version quietly erases the provenance of every
     # answer it produced, which is the one thing this table exists to prevent.
     queries: Mapped[list[Query]] = relationship(
+        back_populates="knowledge_base_version", passive_deletes="all"
+    )
+
+    document_versions: Mapped[list[DocumentVersion]] = relationship(
         back_populates="knowledge_base_version", passive_deletes="all"
     )
 

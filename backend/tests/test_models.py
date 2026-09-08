@@ -51,6 +51,13 @@ PANEL_TABLES = {
     "panel_password_resets",
 }
 
+# Document content (T-84) lives in its own module; structural guarantees are
+# in test_documents.py, this only checks the migration chain carries it.
+DOCUMENT_TABLES = {
+    "documents",
+    "document_versions",
+}
+
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 VERSIONS_DIR = BACKEND_ROOT / "alembic" / "versions"
@@ -258,6 +265,21 @@ class TestMigrations:
     def test_the_panel_tables_are_in_the_same_chain(self, migrated_database: None) -> None:
         """Panel authentication is a migration, not a hand-applied script."""
         assert PANEL_TABLES <= set(inspect(engine).get_table_names())
+
+    def test_the_document_tables_are_in_the_same_chain(self, require_database: None) -> None:
+        """`require_database`, not `migrated_database`, and that is the whole
+        point of the test. `migrated_database` skips whenever a mapped table is
+        missing, which is exactly the failure this is meant to catch: a model
+        added without its migration would leave the suite green with every
+        document test quietly skipped.
+        """
+        present = set(inspect(engine).get_table_names())
+
+        assert DOCUMENT_TABLES <= present, (
+            f"database is missing {', '.join(sorted(DOCUMENT_TABLES - present))}; "
+            "either the migration was never written, or this database predates it: "
+            "run docker compose exec backend alembic upgrade head"
+        )
 
     def test_migration_state_is_recorded(self, migrated_database: None) -> None:
         with engine.connect() as connection:
