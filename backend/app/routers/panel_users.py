@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.dependencies import require_admin
+from app.models.audit import AuditAction
 from app.models.panel import PanelUser
 from app.schemas.panel import (
     PanelUserCreateRequest,
@@ -19,6 +20,7 @@ from app.schemas.panel import (
     PanelUserUpdateRequest,
     PasswordResetResponse,
 )
+from app.services.panel_audit import record_event
 from app.services.panel_users import (
     EmailAlreadyUsed,
     PanelUserInactive,
@@ -56,7 +58,7 @@ def list_users(
 )
 def create_user(
     payload: PanelUserCreateRequest,
-    _admin: PanelUser = Depends(require_admin),
+    admin: PanelUser = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> PasswordResetResponse:
     """Create an account. There is no registration form; this is the only way.
@@ -71,6 +73,15 @@ def create_user(
         )
     except EmailAlreadyUsed as error:
         raise HTTPException(status_code=409, detail="email_already_used") from error
+
+    record_event(
+        session,
+        actor=admin,
+        action=AuditAction.ACCOUNT_CREATED,
+        subject_type="panel_user",
+        subject_id=user.id,
+        detail=user.role.value,
+    )
 
     # The row the service just issued, not `user.password_resets[-1]`: that
     # relationship has no ordering, so on a second reset it can hand back the
@@ -99,7 +110,7 @@ def update_user(
 ) -> PanelUser:
     """Change a role, or switch an account off. Deactivation ends its sessions."""
     try:
-        return update_panel_user(
+        changed = update_panel_user(
             session,
             actor=admin,
             user_id=user_id,
@@ -110,6 +121,18 @@ def update_user(
         raise HTTPException(status_code=404, detail="panel_user_not_found") from error
     except SelfManagementRefused as error:
         raise HTTPException(status_code=403, detail="self_lockout_refused") from error
+
+    # A permission change is the event the foundation asked about by name: who
+    # granted whom access to the knowledge base, and when (T-89).
+    record_event(
+        session,
+        actor=admin,
+        action=AuditAction.ACCOUNT_CHANGED,
+        subject_type="panel_user",
+        subject_id=changed.id,
+        detail=f"role={changed.role.value} active={changed.is_active}",
+    )
+    return changed
 
 
 @router.post(
@@ -123,7 +146,7 @@ def update_user(
 )
 def issue_reset(
     user_id: int,
-    _admin: PanelUser = Depends(require_admin),
+    admin: PanelUser = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> PasswordResetResponse:
     """Issue a one-time token so someone can set a new password.
@@ -139,6 +162,13 @@ def issue_reset(
     except PanelUserInactive as error:
         raise HTTPException(status_code=409, detail="panel_user_inactive") from error
 
+    record_event(
+        session,
+        actor=admin,
+        action=AuditAction.PASSWORD_RESET_ISSUED,
+        subject_type="panel_user",
+        subject_id=user.id,
+    )
     return PasswordResetResponse(
         user=PanelUserResponse.model_validate(user),
         token=token,

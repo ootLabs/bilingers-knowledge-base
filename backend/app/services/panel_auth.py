@@ -28,6 +28,7 @@ from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
 from app.services.panel_errors import unavailable_on_database_failure
+from app.services.panel_two_factor import has_second_factor, verify_second_factor
 
 
 class LoginFailure:
@@ -44,10 +45,22 @@ class LoginFailure:
     INACTIVE_ACCOUNT = "inactive_account"
     LOCKED_ACCOUNT = "locked_account"
     IP_THROTTLED = "ip_throttled"
+    SECOND_FACTOR_REQUIRED = "second_factor_required"
+    BAD_SECOND_FACTOR = "bad_second_factor"
 
 
 class AuthenticationFailed(Exception):
     """The credentials do not identify an account that may log in."""
+
+
+class SecondFactorRequired(Exception):
+    """The password was right; this account also needs a code (T-83).
+
+    The one refusal that is not answered generically, and deliberately so: it is
+    only ever reached by somebody who already typed the correct password, so it
+    reveals nothing they did not already know, and without it the form has no
+    way to know it should ask for a code.
+    """
 
 
 def normalise_email(email: str) -> str:
@@ -197,6 +210,7 @@ def login(
     *,
     email: str,
     password: str,
+    code: str | None = None,
     ip_address: str | None = None,
     user_agent: str | None = None,
 ) -> tuple[PanelSession, str]:
@@ -298,6 +312,39 @@ def login(
         session.commit()
         raise AuthenticationFailed("account is not active")
 
+    if has_second_factor(session, user):
+        # Checked last, after the password and the account state, so a caller
+        # who does not know the password cannot find out which accounts have
+        # 2FA switched on.
+        if not code:
+            _record_attempt(
+                session,
+                email=address,
+                user=user,
+                succeeded=False,
+                reason=LoginFailure.SECOND_FACTOR_REQUIRED,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            session.commit()
+            raise SecondFactorRequired(address)
+        if not verify_second_factor(session, user, code):
+            # Charged against the lockout exactly like a wrong password. Six
+            # digits are guessable in a million tries, so a second factor with
+            # no limit behind it would be a weaker factor, not a second one.
+            _register_failure(session, user)
+            _record_attempt(
+                session,
+                email=address,
+                user=user,
+                succeeded=False,
+                reason=LoginFailure.BAD_SECOND_FACTOR,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            session.commit()
+            raise AuthenticationFailed("wrong second factor")
+
     token = new_token()
     panel_session = PanelSession(
         panel_user=user,
@@ -320,68 +367,3 @@ def login(
     )
     session.commit()
     return panel_session, token
-
-
-@unavailable_on_database_failure
-def resolve_session(session: Session, token: str) -> tuple[PanelUser, PanelSession] | None:
-    """Return the account behind a session token, or None if it cannot be used.
-
-    None covers every reason equally: unknown token, revoked, expired, or an
-    account deactivated since it logged in. The caller turns all of them into
-    the same 401, because the difference is not the client's business.
-
-    Deactivation is enforced here rather than only at logout time, so removing
-    someone's access does not depend on their session being revoked correctly
-    somewhere else.
-    """
-    row = session.execute(
-        select(PanelSession, PanelUser)
-        .join(PanelUser, PanelSession.panel_user_id == PanelUser.id)
-        .where(PanelSession.token_hash == hash_token(token))
-    ).one_or_none()
-    if row is None:
-        return None
-
-    panel_session, user = row
-    if panel_session.revoked_at is not None:
-        return None
-    if as_utc(panel_session.expires_at) <= utcnow():
-        return None
-    if not user.is_active:
-        return None
-    return user, panel_session
-
-
-@unavailable_on_database_failure
-def revoke_session(session: Session, panel_session: PanelSession) -> None:
-    """Log out. Idempotent: revoking an already revoked session keeps the
-    original timestamp, so the audit trail says when access actually ended."""
-    if panel_session.revoked_at is None:
-        panel_session.revoked_at = utcnow()
-    session.commit()
-
-
-def revoke_all_sessions(
-    session: Session, user: PanelUser, *, except_session_id: int | None = None
-) -> int:
-    """Revoke every live session of an account. Returns how many were closed.
-
-    Used wherever access has to stop everywhere at once: a password change, a
-    reset, a deactivation. `except_session_id` keeps the caller's own session
-    alive when they are changing their own password, so the sensible action
-    does not log the person out of the tab they are working in.
-    """
-    now = utcnow()
-    live = session.execute(
-        select(PanelSession).where(
-            PanelSession.panel_user_id == user.id,
-            PanelSession.revoked_at.is_(None),
-        )
-    ).scalars()
-    revoked = 0
-    for panel_session in live:
-        if except_session_id is not None and panel_session.id == except_session_id:
-            continue
-        panel_session.revoked_at = now
-        revoked += 1
-    return revoked

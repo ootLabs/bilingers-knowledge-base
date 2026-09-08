@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_session
 from app.dependencies import current_panel_session
+from app.models.audit import AuditAction
 from app.models.panel import PanelSession, PanelUser
 from app.schemas.panel import (
     PanelLoginRequest,
@@ -24,10 +25,13 @@ from app.schemas.panel import (
 )
 from app.services.panel_auth import (
     AuthenticationFailed,
+    SecondFactorRequired,
     login,
     record_throttled_attempt,
-    revoke_session,
 )
+from app.services.panel_sessions import revoke_session
+from app.services.panel_two_factor import TwoFactorNotConfigured
+from app.services.panel_audit import record_event
 from app.services.panel_passwords import (
     InvalidPasswordResetToken,
     change_password,
@@ -126,9 +130,30 @@ def open_session(
             session,
             email=payload.email,
             password=payload.password,
+            code=payload.code,
             ip_address=ip,
             user_agent=request.headers.get("user-agent") or None,
         )
+    except TwoFactorNotConfigured as error:
+        # The account has a second factor and the server cannot read it: the
+        # key is missing or was rotated. An outage, not a wrong password, and
+        # answering 401 would send the editor to reset a password that is fine.
+        raise HTTPException(status_code=503, detail="two_factor_not_configured") from error
+    except SecondFactorRequired as error:
+        # The one refusal with its own key. It is only reachable by somebody who
+        # already typed the correct password, so it gives away nothing they did
+        # not know, and without it the form cannot know to ask for a code.
+        #
+        # Also signalled in a header, because the frontend never reads a failed
+        # response's body (see `lib/panel-client.ts`) and that rule is worth
+        # more than the convenience of putting it only in `detail`. The header
+        # is listed in `expose_headers` in `app.main`, or the browser hides it
+        # from the script that needs it.
+        raise HTTPException(
+            status_code=401,
+            detail="second_factor_required",
+            headers={"WWW-Authenticate": "Bearer", "X-Second-Factor": "required"},
+        ) from error
     except AuthenticationFailed as error:
         raise HTTPException(status_code=401, detail="invalid_credentials") from error
 
@@ -146,6 +171,9 @@ def close_session(
 ) -> Response:
     """Log out. Revokes this session only, not the account's other ones."""
     revoke_session(session, resolved[1])
+    # Logging in is already in `panel_login_attempts`; logging out is not
+    # recorded anywhere else, so this is the journal's half of the pair (T-89).
+    record_event(session, actor=resolved[0], action=AuditAction.LOGGED_OUT)
     return Response(status_code=204)
 
 

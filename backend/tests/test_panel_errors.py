@@ -27,12 +27,8 @@ from app.main import app
 from app.models.panel import PanelRole, PanelSession, PanelUser
 from app.security import hash_password
 from app.services import rate_limit
-from app.services.panel_auth import (
-    login,
-    record_throttled_attempt,
-    resolve_session,
-    revoke_session,
-)
+from app.services.panel_auth import login, record_throttled_attempt
+from app.services.panel_sessions import resolve_session, revoke_session
 from app.services.panel_errors import PanelServiceUnavailable
 from app.services.panel_passwords import change_password, set_password_with_token
 from app.services.panel_users import (

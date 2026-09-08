@@ -21,7 +21,9 @@ The last two also run from the pre-commit hook. All of them run in CI on every p
 |---|---|---|---|
 | Unit | `backend/tests/test_config.py`, `test_app.py` | Parsing, wiring, resource lifecycle | no |
 | API | `backend/tests/test_health.py` (stubbed) | Status codes, payload shapes, CORS | no |
-| Panel | `backend/tests/test_panel_*.py`, `test_rate_limit.py` | Login, lockout, per-IP throttle, sessions, resets, roles, and what a dropped connection answers - real SQL, in memory | no |
+| Panel | `backend/tests/test_panel_*.py`, `test_rate_limit.py` | Login, lockout, per-IP throttle, sessions, resets, roles, the second factor, documents and their versions, publication, the change journal, and what a dropped connection answers - real SQL, in memory | no |
+| Document import | `backend/tests/test_docx_import.py` | Reading a `.docx` built by the test itself with `zipfile`, its resilience and its refusals | no |
+| Component | `frontend/app/panel/**/*.test.tsx` | The panel's screens: login, list, editor, history, import, publication, journal, second factor | no |
 | Integration | `backend/tests/` marked `integration` | Real SQL, real driver, migrated schema, database constraints | yes |
 | Component | `frontend/app/*.test.tsx` | Rendering, Polish copy, config fallbacks | no |
 | Type | `npm run typecheck`, `npm run build` | Type errors, broken imports, build failures | no |

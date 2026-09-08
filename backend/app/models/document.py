@@ -126,6 +126,24 @@ class DocumentVersion(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Who put this in front of parents, and when (T-88). Separate from
+    # `created_at` and `author_id` because they answer a different question: a
+    # version written on Monday and published on Friday by somebody else is the
+    # normal case, not the exception.
+    #
+    # On the row rather than derived from the change journal (T-89), for the
+    # same reason the login counters live on `panel_users` rather than being
+    # counted from `panel_login_attempts`: the journal's retention is still open
+    # (B-07), and "who published what parents are reading" must not stop being
+    # answerable the day somebody prunes it.
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # SET NULL, matching `author_id`: accounts are deactivated rather than
+    # deleted, but if one ever is, the publication itself still happened.
+    published_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("panel_users.id", ondelete="SET NULL"), index=True
+    )
+
     document: Mapped[Document] = relationship(back_populates="versions")
 
     knowledge_base_version: Mapped[KnowledgeBaseVersion | None] = relationship(

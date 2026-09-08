@@ -3,7 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import chat, health, panel_auth, panel_users
+from app.routers import (
+    chat,
+    health,
+    panel_audit,
+    panel_auth,
+    panel_document_imports,
+    panel_documents,
+    panel_publishing,
+    panel_two_factor,
+    panel_users,
+)
 from app.services.panel_errors import PanelServiceUnavailable
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -14,11 +24,21 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A browser hides every response header from a cross-origin script unless
+    # it is listed here. The login form needs this one to know it should ask for
+    # a second factor (T-83), and it is a header rather than a field in the
+    # body because the frontend never reads a failed response's body.
+    expose_headers=["X-Second-Factor"],
 )
 
 app.include_router(chat.router)
 app.include_router(health.router)
 app.include_router(panel_auth.router)
+app.include_router(panel_documents.router)
+app.include_router(panel_document_imports.router)
+app.include_router(panel_publishing.router)
+app.include_router(panel_audit.router)
+app.include_router(panel_two_factor.router)
 app.include_router(panel_users.router)
 
 

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models.panel import PanelRole, PanelSession, PanelUser
-from app.services.panel_auth import resolve_session
+from app.services.panel_sessions import resolve_session
 
 # auto_error=False so a missing header produces the same 401 with the same body
 # as a bad one. FastAPI's own error for a missing header is a 403, which would

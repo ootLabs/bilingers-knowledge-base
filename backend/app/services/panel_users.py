@@ -14,7 +14,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.panel import PanelPasswordReset, PanelRole, PanelUser
-from app.services.panel_auth import normalise_email, revoke_all_sessions
+from app.services.panel_auth import normalise_email
+from app.services.panel_sessions import revoke_all_sessions
 from app.services.panel_errors import unavailable_on_database_failure
 from app.services.panel_passwords import issue_password_reset
 

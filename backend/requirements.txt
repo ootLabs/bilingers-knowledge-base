@@ -5,3 +5,16 @@ sqlalchemy==2.0.36
 alembic==1.14.0
 psycopg[binary]==3.2.3
 bcrypt==4.2.1
+# Reads the .docx files the foundation writes in (T-85). Parsing happens in
+# memory; nothing is written to disk.
+python-docx==1.1.2
+# Required by FastAPI to accept a file upload at all; without it the import
+# endpoint raises at import time rather than at request time.
+python-multipart==0.0.20
+# TOTP for the panel's second factor (T-83). Standard RFC 6238, so any
+# authenticator app works and nothing depends on a provider.
+pyotp==2.9.0
+# Encrypts TOTP secrets at rest (Fernet). A secret has to be readable to verify
+# a code, so it cannot be hashed; the key lives in the environment, not the
+# database.
+cryptography==44.0.0
