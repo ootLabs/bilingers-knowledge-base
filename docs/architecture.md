@@ -48,7 +48,7 @@ any component sees it, and the body of a failed response is never read.
 
 ## Data model
 
-Five tables, in `backend/app/models/`. Each one exists because a product decision needs it, not because it rounds out a diagram.
+Seven tables, in `backend/app/models/`. Each one exists because a product decision needs it, not because it rounds out a diagram. (Panel accounts add four more, documented separately through the ADR entries below rather than in this table.)
 
 | Table | Exists for | Notes |
 |---|---|---|
@@ -57,10 +57,13 @@ Five tables, in `backend/app/models/`. Each one exists because a product decisio
 | `queries` | Cost reporting and quality regression | Append-only. Question, answer, model, tokens, cost in USD and PLN with the rate and price list behind it, duration |
 | `knowledge_base_versions` | Tracing an answer to the exact content behind it | Version, ingest time, record count, source checksum |
 | `knowledge_gaps` | The queue of what the base could not answer | Survives deletion of the query it came from |
+| `documents` | A document's stable identity | Never updated; append-only, `created_at` alone |
+| `document_versions` | The document's actual content, one immutable snapshot per edit | Title, content, author, change comment, status (`draft`/`in_review`/`published`/`withdrawn`), optional link to the `knowledge_base_versions` ingest that published it |
 
 ```
 users 1--0..n chat_sessions 1--0..n queries 0..1--1 knowledge_gaps
                                        n--0..1 knowledge_base_versions
+documents 1--0..n document_versions n--0..1 knowledge_base_versions
 ```
 
 Several constraints carry decisions rather than hygiene, so they live in the database instead of in application code:
@@ -68,6 +71,7 @@ Several constraints carry decisions rather than hygiene, so they live in the dat
 - `chat_sessions.user_id` is **nullable**. Anonymous parents have to be countable or the quota is decorative.
 - `queries` carries `CHECK (answer IS NULL OR knowledge_base_version_id IS NOT NULL)`. An answer that cannot name the base version behind it becomes unexplainable the moment the base changes, and the base is expected to change indefinitely.
 - `queries` also refuses a cost with no model to attribute it to (`queries_cost_requires_model`), a cost without the rate and price list that produced it (`queries_cost_requires_pricing_provenance`), and any negative measurement (`queries_measurements_non_negative`). "Summable per model" and "reproducible in PLN" are promises the report makes to the foundation, so they are enforced where the rows are, not where the writer is.
+- `document_versions` carries a partial unique index, `document_versions_one_published_per_document` (`UNIQUE (document_id) WHERE status = 'published'`). At most one version of a document may be published at a time, which is what makes "the chat reads only published content" (T-88) a question the database answers rather than a rule a service has to remember. A `published_version_id` pointer on `documents` was rejected: it would need a circular foreign key between the two tables and a second place the same fact could go stale.
 
 Two views, `query_costs` and `query_costs_monthly`, are the read side. They carry no personal data by construction, so a monthly figure can be handed to the foundation without a stripping step. See `docs/llm/cost-control.md`.
 
@@ -116,6 +120,8 @@ The intended erasure model is **scrubbing marked columns rather than deleting ro
 | 2026-09-02 | `app/error.tsx` never binds the thrown `Error` it is handed | Its message and digest are the likeliest carriers of a stack trace, an internal hostname or a provider name anywhere in the frontend. Not destructuring it is a structural guarantee; remembering not to render it is not |
 | 2026-09-02 | 429 is mapped to the limit state before anything emits it | The anonymous quota is T-71/T-73, but T-63 owns what a parent sees when it trips, and a state nobody can reach is a state nobody has tested. The counter lands later without touching the client |
 | 2026-09-02 | State tone is a left border plus copy, never colored text; `--color-danger` is border-only | `--color-primary` already fails WCAG AA on white (see the note at the top of `globals.css`), so tinting status text would spread that debt rather than contain it. Border-only use also means the 3:1 non-text threshold applies, which the token clears in both light and dark |
+| 2026-09-07 | Document content lives on `document_versions`, not `documents`; `documents` carries only an id and `created_at` | A version is the immutable snapshot the card requires, so title and content have to live where editing them means inserting a new row, not updating an existing one. A status or title on `documents` too would be a second place the same fact could disagree with the version that actually holds it |
+| 2026-09-07 | A document version's author is a foreign key to `panel_users`, not free text | `panel_users` (T-82) already exists and its own model commits to this: accounts are deactivated rather than deleted specifically so the audit trail (T-89) can keep pointing at a real account. `ON DELETE SET NULL` matches the existing `panel_login_attempts.panel_user_id` precedent: the content must outlive the account that wrote it |
 
 ## Integrations / external dependencies
 

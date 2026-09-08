@@ -7,6 +7,7 @@ module belongs in the imports below or it is invisible to migrations.
 
 from app.models.base import PERSONAL_DATA, Base, TimestampMixin, personal_data_columns
 from app.models.chat import ChatSession, Query
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.knowledge import KnowledgeBaseVersion, KnowledgeGap, KnowledgeGapStatus
 from app.models.panel import (
     PanelLoginAttempt,
@@ -21,6 +22,9 @@ __all__ = [
     "PERSONAL_DATA",
     "Base",
     "ChatSession",
+    "Document",
+    "DocumentStatus",
+    "DocumentVersion",
     "KnowledgeBaseVersion",
     "KnowledgeGap",
     "KnowledgeGapStatus",

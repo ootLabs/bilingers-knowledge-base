@@ -32,7 +32,7 @@ These come from the product, not from engineering taste. Every design decision i
 
 | Piece | State |
 |---|---|
-| Knowledge base content | Being written by the foundation; not in this repo |
+| Knowledge base content | Being written by the foundation; not in this repo. Storage for it exists (`documents`/`document_versions`, T-84), nothing has been ingested into it |
 | Ingestion pipeline | Not started |
 | Retrieval | Not started; no vector database exists |
 | Model integration | Not started; no SDK, no API key, no provider chosen |
