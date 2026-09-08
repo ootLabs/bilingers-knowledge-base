@@ -19,6 +19,11 @@ Each entry ≤ 5 lines. Do not narrate process, list files changed (git knows), 
 
 ---
 
+## 2026-09-08 - audit of BLOCK F: 2FA was unreachable, three gates were red
+**Done:** `PANEL_TOTP_ENCRYPTION_KEY`, `PANEL_TOTP_ISSUER`, `PANEL_BACKUP_CODE_COUNT` and `DOCX_IMPORT_MAX_BYTES` now reach the backend through `docker-compose.yml`, so T-83 works instead of answering 503 to every enrolment. The journal names the three 2FA actions in Polish, a missing encryption key is told apart from a database outage, publishing an already published version no longer writes a second journal line, and `pytest`, `npm test` and `npm run typecheck` are green again (367 backend, 169 frontend).
+**Decisions:** The missing key is signalled with `X-Second-Factor: not-configured` rather than by reading `detail`, extending the header already in `expose_headers` instead of breaking the "never read a failed body" rule. `publish_version` returns `Publication(version, changed)` so the router can tell a real publication from a second click; the journal is the only consumer of that flag.
+**Watch out:** All three red gates were broken test assertions, not broken code, and CI never saw them: it runs on `push: [main, dev]` and on pull requests, and this work sat on a branch that is neither. The compose block is the only place a backend setting can be set (no `env_file`), so a variable added to `app/config.py` and `.env.example` but not to compose is a variable nobody can set. Still open and needing a human decision: `in_review` is offered as a filter and named to the foundation but no code path can set it, and `runbookblokf.md`/`podsumowanie-blok-f.md` are committed although P9 said the summary must not be.
+
 ## 2026-09-08 - BLOCK F closed, partially (T-82 to T-89)
 **Done:** The foundation can create, edit, version, import, publish and withdraw documents on its own, behind a login with an optional second factor, with every action in a read-only journal. Six entries below cover the parts; the oldest six entries moved to `log-archive/2026.md` to keep the 20 entry cap.
 **Decisions:** `docs/llm/knowledge-base.md` now describes what exists rather than what was planned. `docs/architecture.md` gained the panel, the editing layer and the journal as modules, plus six decision rows dated today.
