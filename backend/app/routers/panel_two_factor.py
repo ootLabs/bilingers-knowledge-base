@@ -59,7 +59,19 @@ _BAD_CODE = {422: {"description": "The code does not match."}}
 def _not_configured() -> HTTPException:
     # 503, not 500: the deployment is missing a key, which is an operator's
     # problem and not the caller's, and it is fixable without a code change.
-    return HTTPException(status_code=503, detail="two_factor_not_configured")
+    #
+    # The header is what makes it tellable apart from the other 503 these
+    # endpoints can answer, a database outage, without the frontend reading a
+    # failed response's body (the rule set on 2026-09-02). Same mechanism and
+    # same header as "this account needs a second factor", so it is already in
+    # the CORS `expose_headers` list in `app.main`. Without it a missing key
+    # reaches the editor as "try again in a moment", which is advice about
+    # something that will never fix itself.
+    return HTTPException(
+        status_code=503,
+        detail="two_factor_not_configured",
+        headers={"X-Second-Factor": "not-configured"},
+    )
 
 
 @router.get("/users/me/two-factor", response_model=TwoFactorStatusResponse)

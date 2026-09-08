@@ -124,13 +124,42 @@ describe("panelRequest", () => {
 
   it("sends the token as a bearer credential", async () => {
     storePanelToken("session-token");
-    const fetchMock = vi.fn(async () => jsonResponse(200, []));
+    // The parameters are declared, unused, so `mock.calls` is typed as the pair
+    // this test reads back. Without them it is an empty tuple and the cast
+    // below is the error `npm run typecheck` reports.
+    const fetchMock = vi.fn(async (_path: string, _init: RequestInit) =>
+      jsonResponse(200, []),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await panelRequest("/api/panel/documents");
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, init] = fetchMock.mock.calls[0];
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer session-token");
+  });
+
+  it("tells a missing encryption key apart from a database outage", async () => {
+    // Both are 503 on the same endpoint, and the copy differs in what it asks
+    // the editor to do: wait, or write to whoever runs the system. The header
+    // is what separates them without reading the body.
+    storePanelToken("session-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => failing(503, { "X-Second-Factor": "not-configured" })),
+    );
+
+    await expect(panelRequest("/api/panel/users/me/two-factor")).rejects.toMatchObject({
+      failure: "two_factor_not_configured",
+    });
+  });
+
+  it("still reads a plain 503 as the database being away", async () => {
+    storePanelToken("session-token");
+    vi.stubGlobal("fetch", vi.fn(async () => failing(503)));
+
+    await expect(panelRequest("/api/panel/documents")).rejects.toMatchObject({
+      failure: "database_unavailable",
+    });
   });
 
   it("drops a token the backend has stopped accepting", async () => {

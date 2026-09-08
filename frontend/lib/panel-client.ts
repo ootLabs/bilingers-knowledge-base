@@ -118,6 +118,18 @@ async function panelFetch(path: string, init: RequestInit): Promise<Response> {
  * is in hand something eventually renders it. The status is all that is taken.
  */
 function failureFor(response: Response): PanelRequestError {
+  // The one 503 that is not a database outage: the deployment has no TOTP
+  // encryption key, so enrolling and verifying a code cannot work until an
+  // operator sets one. Read from the header for the same reason the login form
+  // reads the second-factor prompt from one, and it is the same header, so no
+  // new CORS entry is needed. Telling these apart matters because the copy
+  // differs in what it asks the editor to do: wait, or write to somebody.
+  if (
+    response.status === 503 &&
+    response.headers.get("X-Second-Factor") === "not-configured"
+  ) {
+    return new PanelRequestError("two_factor_not_configured");
+  }
   return new PanelRequestError(FAILURE_BY_STATUS[response.status] ?? "unreachable");
 }
 

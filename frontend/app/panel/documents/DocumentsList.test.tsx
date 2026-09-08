@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PanelRequestError } from "@/lib/panel-client";
@@ -74,8 +74,11 @@ describe("DocumentsList", () => {
     listDocumentsMock.mockResolvedValue(DOCUMENTS);
     render(<DocumentsList />);
 
-    expect(await screen.findByText("Szkic")).toBeInTheDocument();
-    expect(screen.getByText("Opublikowany")).toBeInTheDocument();
+    // Scoped to the list, because the status filter offers every state as an
+    // option and an unscoped query for "Szkic" matches the dropdown too.
+    const list = await screen.findByRole("list");
+    expect(within(list).getByText("Szkic")).toBeInTheDocument();
+    expect(within(list).getByText("Opublikowany")).toBeInTheDocument();
   });
 
   it("narrows the list by title", async () => {

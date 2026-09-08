@@ -7,6 +7,8 @@ second factor a second factor rather than a formality.
 
 from __future__ import annotations
 
+from urllib.parse import unquote, urlparse
+
 import pyotp
 import pytest
 from cryptography.fernet import Fernet
@@ -82,7 +84,12 @@ class TestTurningItOn:
 
         assert body["secret"]
         assert body["otpauth_uri"].startswith("otpauth://totp/")
-        assert panel_editor.email in body["otpauth_uri"]
+        # The label is percent-encoded, as the Key URI format requires and as
+        # every authenticator app expects, so the address is only there once the
+        # path is decoded. Asserting on the raw URI would be asserting that the
+        # encoding is missing.
+        label = unquote(urlparse(body["otpauth_uri"]).path.lstrip("/"))
+        assert label == f"{settings.panel_totp_issuer}:{panel_editor.email}"
 
     def test_confirming_prints_the_backup_codes_exactly_once(
         self, encryption_key: None, panel_client: TestClient, panel_editor: PanelUser
@@ -132,6 +139,11 @@ class TestTurningItOn:
 
         assert response.status_code == 503
         assert response.json()["detail"] == "two_factor_not_configured"
+        # The header is what tells this 503 apart from a database outage on the
+        # same endpoint, for a frontend that never reads a failed response's
+        # body. Without it the editor is told to wait for something that will
+        # not fix itself.
+        assert response.headers["X-Second-Factor"] == "not-configured"
         assert panel_db.execute(select(PanelTotpSecret)).first() is None
 
 
