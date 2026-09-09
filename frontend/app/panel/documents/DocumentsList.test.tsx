@@ -43,6 +43,36 @@ function row(
       publishedAt: status === "published" ? createdAt : null,
       publishedByEmail: status === "published" ? "redaktorka@fundacja.test" : null,
     },
+    // A row whose newest version is the published one: the simple case, where
+    // both answers agree. The interesting case is built by `withLiveVersion`.
+    publishedVersion:
+      status === "published"
+        ? {
+            versionNumber: 1,
+            status,
+            title,
+            changeComment: null,
+            authorEmail: "redaktorka@fundacja.test",
+            createdAt,
+            publishedAt: createdAt,
+            publishedByEmail: "redaktorka@fundacja.test",
+          }
+        : null,
+  };
+}
+
+/** A document parents are reading at version 1 while version 2 is a draft. */
+function withLiveVersion(document: DocumentSummary): DocumentSummary {
+  return {
+    ...document,
+    latestVersion: { ...document.latestVersion, versionNumber: 2, status: "draft" },
+    publishedVersion: {
+      ...document.latestVersion,
+      versionNumber: 1,
+      status: "published",
+      publishedAt: document.createdAt,
+      publishedByEmail: "redaktorka@fundacja.test",
+    },
   };
 }
 
@@ -122,6 +152,111 @@ describe("DocumentsList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wyczyść filtry" }));
 
     expect(screen.getByText("Dwujezycznosc w przedszkolu")).toBeInTheDocument();
+  });
+
+  it("keeps saying published while a newer draft waits behind it", async () => {
+    // The bug this replaces: one save flipped the pill to "Szkic" and the
+    // screen stopped mentioning the version parents were still being served.
+    listDocumentsMock.mockResolvedValue([
+      withLiveVersion(row(2, "Rozmowa z logopeda", "published", "2026-09-05T10:00:00Z")),
+    ]);
+    render(<DocumentsList />);
+
+    const list = await screen.findByRole("list");
+    expect(within(list).getByText("Opublikowany")).toBeInTheDocument();
+    expect(within(list).queryByText("Szkic")).not.toBeInTheDocument();
+    expect(screen.getByText(/Rodzice czytają wersję 1/)).toBeInTheDocument();
+    expect(screen.getByText(/wersja 2/)).toBeInTheDocument();
+  });
+
+  it("finds that document under the published filter, not under drafts", async () => {
+    listDocumentsMock.mockResolvedValue([
+      withLiveVersion(row(2, "Rozmowa z logopeda", "published", "2026-09-05T10:00:00Z")),
+    ]);
+    render(<DocumentsList />);
+    await screen.findByText("Rozmowa z logopeda");
+
+    fireEvent.change(screen.getByLabelText("Stan dokumentu"), {
+      target: { value: "published" },
+    });
+    expect(screen.getByText("Rozmowa z logopeda")).toBeInTheDocument();
+
+    // And under drafts as well: it genuinely is both, and this is the only way
+    // to ask "what has work waiting to go live".
+    fireEvent.change(screen.getByLabelText("Stan dokumentu"), {
+      target: { value: "draft" },
+    });
+    expect(screen.getByText("Rozmowa z logopeda")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Stan dokumentu"), {
+      target: { value: "withdrawn" },
+    });
+    expect(screen.queryByText("Rozmowa z logopeda")).not.toBeInTheDocument();
+  });
+
+  it("does not call a withdrawn newer version a draft", async () => {
+    // Publish v2, withdraw it, publish v1: the newest version is a deliberate
+    // withdrawal, not work in progress, and calling it a draft would hide that.
+    const document = withLiveVersion(
+      row(3, "Wycofany rozdzial", "published", "2026-09-05T10:00:00Z"),
+    );
+    listDocumentsMock.mockResolvedValue([
+      { ...document, latestVersion: { ...document.latestVersion, status: "withdrawn" } },
+    ]);
+    render(<DocumentsList />);
+
+    expect(await screen.findByText(/Rodzice czytają wersję 1/)).toBeInTheDocument();
+    expect(screen.queryByText(/czekają w szkicu/)).not.toBeInTheDocument();
+  });
+
+  it("finds a retitled document by the title parents still see", async () => {
+    const document = withLiveVersion(
+      row(4, "Dwujezycznosc w przedszkolu", "published", "2026-09-05T10:00:00Z"),
+    );
+    listDocumentsMock.mockResolvedValue([
+      {
+        ...document,
+        latestVersion: { ...document.latestVersion, title: "Dwujezycznosc w zlobku" },
+      },
+    ]);
+    render(<DocumentsList />);
+    await screen.findByText("Dwujezycznosc w zlobku");
+
+    fireEvent.change(screen.getByLabelText("Szukaj w tytułach"), {
+      target: { value: "przedszkolu" },
+    });
+
+    expect(screen.getByText("Dwujezycznosc w zlobku")).toBeInTheDocument();
+    expect(screen.getByText(/Dwujezycznosc w przedszkolu/)).toBeInTheDocument();
+  });
+
+  it("cancels the read when the screen goes away", async () => {
+    // The plumbing was carried unused until now. A read nobody is waiting for
+    // must not be able to land on top of a newer one.
+    listDocumentsMock.mockResolvedValue([]);
+    const { unmount } = render(<DocumentsList />);
+    await screen.findByText("Nie ma jeszcze żadnego dokumentu");
+
+    const signal = listDocumentsMock.mock.calls[0][0];
+    expect(signal?.aborted).toBe(false);
+
+    unmount();
+
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("says nothing when a read was superseded rather than failed", async () => {
+    // An abort is the screen cancelling itself, so there is nothing to tell
+    // anybody. Reported as a failure it would read "check your internet
+    // connection" on a screen whose network is fine.
+    const aborted = new Error("aborted");
+    aborted.name = "AbortError";
+    listDocumentsMock.mockRejectedValue(aborted);
+    render(<DocumentsList />);
+
+    await waitFor(() => expect(listDocumentsMock).toHaveBeenCalled());
+    expect(screen.queryByText("Nie udało się połączyć")).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("sends an expired session back to the login screen", async () => {

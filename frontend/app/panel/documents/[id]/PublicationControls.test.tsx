@@ -50,8 +50,31 @@ beforeEach(() => {
 });
 
 describe("PublicationControls", () => {
+  it("names the live version when the one on screen is not it", async () => {
+    render(
+      <PublicationControls
+        documentId={1}
+        version={version()}
+        live={PUBLISHED}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Opublikowana jest wersja 2/)).toBeInTheDocument();
+  });
+
+  it("says nothing is published when nothing is", async () => {
+    render(
+      <PublicationControls documentId={1} version={version()} live={null} onChanged={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByText("Żadna wersja tego dokumentu nie jest opublikowana."),
+    ).toBeInTheDocument();
+  });
+
   it("says in plain words that a draft is not what parents are reading", () => {
-    render(<PublicationControls documentId={1} version={version()} onChanged={vi.fn()} />);
+    render(<PublicationControls documentId={1} version={version()} live={null} onChanged={vi.fn()} />);
 
     expect(
       screen.getByText(/Ta wersja nie jest opublikowana/),
@@ -61,7 +84,7 @@ describe("PublicationControls", () => {
 
   it("says who published it and when, not just that it is published", async () => {
     // A published status with no date and no name is a claim, not an answer.
-    render(<PublicationControls documentId={1} version={PUBLISHED} onChanged={vi.fn()} />);
+    render(<PublicationControls documentId={1} version={PUBLISHED} live={PUBLISHED} onChanged={vi.fn()} />);
 
     expect(
       screen.getByText("Dokument jest opublikowany, asystent już z niego korzysta."),
@@ -72,7 +95,7 @@ describe("PublicationControls", () => {
   it("hands the published version back so the screen stops offering to publish it", async () => {
     publishVersionMock.mockResolvedValue(PUBLISHED);
     const onChanged = vi.fn();
-    render(<PublicationControls documentId={1} version={version()} onChanged={onChanged} />);
+    render(<PublicationControls documentId={1} version={version()} live={null} onChanged={onChanged} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Opublikuj tę wersję" }));
 
@@ -83,7 +106,7 @@ describe("PublicationControls", () => {
   it("offers withdrawal, not publication, once it is live", async () => {
     withdrawVersionMock.mockResolvedValue(version({ status: "withdrawn" }));
     const onChanged = vi.fn();
-    render(<PublicationControls documentId={1} version={PUBLISHED} onChanged={onChanged} />);
+    render(<PublicationControls documentId={1} version={PUBLISHED} live={PUBLISHED} onChanged={onChanged} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Wycofaj z publikacji" }));
 
@@ -93,7 +116,7 @@ describe("PublicationControls", () => {
 
   it("says what went wrong instead of leaving the click silent", async () => {
     publishVersionMock.mockRejectedValue(new PanelRequestError("conflict"));
-    render(<PublicationControls documentId={1} version={version()} onChanged={vi.fn()} />);
+    render(<PublicationControls documentId={1} version={version()} live={null} onChanged={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Opublikuj tę wersję" }));
 

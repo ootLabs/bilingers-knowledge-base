@@ -8,7 +8,13 @@ import StatusPill from "@/components/StatusPill";
 import { formatDateTime } from "@/lib/format-date";
 import { fill, getTranslations } from "@/lib/i18n";
 import type { PanelFailure } from "@/lib/panel-client";
-import { getDocument, saveVersion, type VersionDetail } from "@/lib/panel-documents";
+import {
+  getDocument,
+  saveVersion,
+  type DocumentDetail,
+  type VersionDetail,
+  type VersionSummary,
+} from "@/lib/panel-documents";
 
 import DocumentForm, { type DocumentDraft } from "../DocumentForm";
 import PublicationControls from "./PublicationControls";
@@ -30,7 +36,10 @@ import { useSessionRecovery } from "../../use-session-recovery";
 type EditorState =
   | { phase: "loading" }
   | { phase: "failed"; failure: PanelFailure }
-  | { phase: "ready"; base: VersionDetail };
+  // `live` is whichever version parents are reading, which is not the one
+  // being edited as soon as anybody saves. Without it this screen said
+  // nothing at all about a document it was actively serving.
+  | { phase: "ready"; base: VersionDetail; live: VersionSummary | null };
 
 function draftFrom(version: VersionDetail): DocumentDraft {
   return { title: version.title, content: version.content, changeComment: "" };
@@ -49,22 +58,52 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
   const [saveFailure, setSaveFailure] = useState<PanelFailure | null>(null);
   const [savedAs, setSavedAs] = useState<VersionDetail | null>(null);
 
-  const load = useCallback(async () => {
-    setState({ phase: "loading" });
+  /**
+   * Re-read what the screen says about the document, and nothing else.
+   *
+   * `draft` is deliberately untouched. The text in the box may be work the
+   * editor has typed and not saved, and it is then the only copy of it, which
+   * is the same reason `submit` leaves it alone when a save is refused.
+   * Publishing acts on the last saved version and has no business overwriting
+   * the box.
+   */
+  const refresh = useCallback(async (signal?: AbortSignal): Promise<DocumentDetail | null> => {
     try {
-      const document = await getDocument(documentId);
-      setState({ phase: "ready", base: document.latestVersion });
-      setDraft(draftFrom(document.latestVersion));
+      const document = await getDocument(documentId, signal);
+      setState({
+        phase: "ready",
+        base: document.latestVersion,
+        live: document.publishedVersion,
+      });
+      return document;
     } catch (error) {
       const failure = recover(error);
       if (failure !== null) {
         setState({ phase: "failed", failure });
       }
+      return null;
     }
   }, [documentId, recover]);
 
+  // Opening the document: the same read, plus seeding the form from it. Seeding
+  // happens only here, because this is the one moment when there is no typed
+  // text that could be lost.
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setState({ phase: "loading" });
+    const document = await refresh(signal);
+    if (document !== null) {
+      setDraft(draftFrom(document.latestVersion));
+    }
+  }, [refresh]);
+
   useEffect(() => {
-    void load();
+    // `documentId` comes from the route, so this callback changes when the
+    // editor moves to another document. Without the abort, the first
+    // document's answer could arrive after the second's and seed the form with
+    // the wrong text.
+    const request = new AbortController();
+    void load(request.signal);
+    return () => request.abort();
   }, [load]);
 
   async function submit(event: React.FormEvent) {
@@ -81,7 +120,9 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
         content: draft.content,
         changeComment: draft.changeComment.trim() || null,
       });
-      setState({ phase: "ready", base: version });
+      // The published version is untouched by a save, by design: that is the
+      // whole point of a save never changing what a parent reads.
+      setState({ phase: "ready", base: version, live: state.live });
       // The comment belonged to the save that just happened; carrying it into
       // the next one would file the wrong note against the wrong change.
       setDraft({ ...draft, changeComment: "" });
@@ -117,6 +158,7 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
   }
 
   const base = state.base;
+  const live = state.live;
 
   return (
     <>
@@ -133,10 +175,21 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
             {fill(t("panel.editor.lastSavedBy"), { author: base.authorEmail })}
           </p>
         )}
-        {base.status === "published" && (
+        {base.status === "published" ? (
           // The one confusion worth a whole block of its own: editing on top of
           // what parents are reading right now.
           <p className="editor-context__warning">{t("panel.editor.editingPublished")}</p>
+        ) : live !== null ? (
+          // Editing a draft while a different version is live. Silence here
+          // was the bug: the screen looked identical whether the document was
+          // being served or had never been published.
+          <p className="editor-context__warning">
+            {fill(t("panel.editor.parentsReadOther"), { version: live.versionNumber })}
+          </p>
+        ) : (
+          <p className="editor-context__line editor-context__line--muted">
+            {t("panel.editor.nothingPublished")}
+          </p>
         )}
         <p className="editor-context__links">
           <Link href="/panel/documents">{t("panel.editor.backToList")}</Link>
@@ -181,9 +234,14 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
       <PublicationControls
         documentId={documentId}
         version={base}
-        onChanged={(version) => {
-          setState({ phase: "ready", base: version });
+        live={live}
+        onChanged={() => {
+          // Publishing or withdrawing changes both answers at once (which
+          // version is live, and what the newest one's status is), so the
+          // document is re-read rather than patched here from one half of it.
+          // `refresh`, not `load`: whatever is typed in the box stays.
           setSavedAs(null);
+          void refresh();
         }}
       />
     </>

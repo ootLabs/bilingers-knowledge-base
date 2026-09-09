@@ -5,6 +5,7 @@ import { PanelRequestError } from "@/lib/panel-client";
 import {
   type DocumentDetail,
   getDocument,
+  publishVersion,
   saveVersion,
   type VersionDetail,
 } from "@/lib/panel-documents";
@@ -24,11 +25,17 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/panel-documents", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/panel-documents")>();
-  return { ...actual, getDocument: vi.fn(), saveVersion: vi.fn() };
+  return {
+    ...actual,
+    getDocument: vi.fn(),
+    saveVersion: vi.fn(),
+    publishVersion: vi.fn(),
+  };
 });
 
 const getDocumentMock = vi.mocked(getDocument);
 const saveVersionMock = vi.mocked(saveVersion);
+const publishVersionMock = vi.mocked(publishVersion);
 
 function version(overrides: Partial<VersionDetail> = {}): VersionDetail {
   return {
@@ -45,17 +52,63 @@ function version(overrides: Partial<VersionDetail> = {}): VersionDetail {
   };
 }
 
-function document(latest: VersionDetail): DocumentDetail {
-  return { id: 1, createdAt: "2026-09-01T09:00:00Z", latestVersion: latest };
+function document(
+  latest: VersionDetail,
+  publishedVersion: DocumentDetail["publishedVersion"] = null,
+): DocumentDetail {
+  return {
+    id: 1,
+    createdAt: "2026-09-01T09:00:00Z",
+    latestVersion: latest,
+    publishedVersion,
+  };
 }
 
 beforeEach(() => {
   getDocumentMock.mockReset();
   saveVersionMock.mockReset();
+  publishVersionMock.mockReset();
   replace.mockReset();
 });
 
 describe("DocumentEditor", () => {
+  it("does not eat unsaved text when the document is published", async () => {
+    // Publishing acts on the last saved version, so re-reading the document
+    // afterwards must not overwrite the box. Whatever is typed there may be
+    // the only copy of it, the same rule a refused save follows.
+    const published = version({ status: "published" as const });
+    getDocumentMock.mockResolvedValue(document(version()));
+    publishVersionMock.mockResolvedValue(published);
+    render(<DocumentEditor documentId={1} />);
+
+    const content = await screen.findByLabelText("Treść");
+    fireEvent.change(content, { target: { value: "Akapit, ktorego jeszcze nie zapisano." } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Opublikuj tę wersję" }));
+
+    await waitFor(() => expect(publishVersionMock).toHaveBeenCalled());
+    expect(await screen.findByDisplayValue("Akapit, ktorego jeszcze nie zapisano.")).toBeInTheDocument();
+  });
+
+  it("names the version parents are reading while a draft is on screen", async () => {
+    const live = { ...version({ versionNumber: 1, status: "published" as const }) };
+    getDocumentMock.mockResolvedValue(document(version({ versionNumber: 2 }), live));
+    render(<DocumentEditor documentId={1} />);
+
+    expect(
+      await screen.findByText(/Rodzice czytają teraz wersję 1/),
+    ).toBeInTheDocument();
+  });
+
+  it("says so plainly when no version has ever been published", async () => {
+    getDocumentMock.mockResolvedValue(document(version(), null));
+    render(<DocumentEditor documentId={1} />);
+
+    expect(
+      await screen.findByText(/rodzice go jeszcze nie widzą/),
+    ).toBeInTheDocument();
+  });
+
   it("says which version is on screen and when it was written", async () => {
     getDocumentMock.mockResolvedValue(document(version()));
     render(<DocumentEditor documentId={1} />);

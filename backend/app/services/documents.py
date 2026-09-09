@@ -81,20 +81,34 @@ class VersionDetail(VersionSummary):
 
 @dataclass(frozen=True)
 class DocumentSummary:
-    """A document plus its newest version, which is what a list row shows."""
+    """A document, its newest version, and whichever version is published.
+
+    Both, because they answer different questions and stop being the same row
+    at the first save. Reporting only the newest one made the panel claim
+    nothing was published while parents went on reading the older version that
+    still was. `None` means nothing ever went live; it is never more than one,
+    which `document_versions_one_published_per_document` guarantees.
+    """
 
     id: int
     created_at: datetime
     latest_version: VersionSummary
+    published_version: VersionSummary | None = None
 
 
 @dataclass(frozen=True)
 class DocumentDetail:
-    """A document opened for editing: identity plus the newest version's text."""
+    """A document opened for editing: identity plus the newest version's text.
+
+    `published_version` is a summary, not a detail: the editor says which
+    version parents are reading, it does not show its text. Comparing the two
+    is the history screen's job.
+    """
 
     id: int
     created_at: datetime
     latest_version: VersionDetail
+    published_version: VersionSummary | None = None
 
 
 def summary_of(

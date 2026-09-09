@@ -29,10 +29,20 @@ const RAW_VERSION = {
   content: "Tresc.",
 };
 
+const RAW_LIVE_VERSION = {
+  ...RAW_VERSION,
+  version_number: 1,
+  status: "published" as const,
+  change_comment: null,
+  published_at: "2026-09-02T08:00:00Z",
+  published_by_email: "justyna@fundacja.test",
+};
+
 const RAW_DOCUMENT = {
   id: 3,
   created_at: "2026-09-01T10:00:00Z",
   latest_version: RAW_VERSION,
+  published_version: RAW_LIVE_VERSION,
 };
 
 beforeEach(() => {
@@ -60,7 +70,38 @@ describe("panel-documents", () => {
         publishedAt: null,
         publishedByEmail: null,
       },
+      // The other half of the row, and the reason it exists: version 2 is the
+      // draft an editor would open, version 1 is what a parent gets served.
+      publishedVersion: {
+        versionNumber: 1,
+        status: "published",
+        title: "Dwujezycznosc w przedszkolu",
+        changeComment: null,
+        authorEmail: "redaktorka@fundacja.test",
+        createdAt: "2026-09-08T10:00:00Z",
+        publishedAt: "2026-09-02T08:00:00Z",
+        publishedByEmail: "justyna@fundacja.test",
+      },
     });
+  });
+
+  it("reads a document with nothing published as having nothing published", async () => {
+    request.mockResolvedValue({ ...RAW_DOCUMENT, published_version: null });
+
+    const document = await getDocument(3);
+
+    expect(document.publishedVersion).toBeNull();
+  });
+
+  it("survives a response that leaves the field out entirely", async () => {
+    // Absent and null mean the same thing here. Crashing on the difference
+    // would take out the whole screen over one sentence on it.
+    const { published_version: _omitted, ...withoutTheField } = RAW_DOCUMENT;
+    request.mockResolvedValue(withoutTheField);
+
+    const document = await getDocument(3);
+
+    expect(document.publishedVersion).toBeNull();
   });
 
   it("reads one document with the text of its newest version", async () => {

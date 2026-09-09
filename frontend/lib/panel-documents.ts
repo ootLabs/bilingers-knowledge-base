@@ -30,13 +30,67 @@ export type DocumentSummary = {
   id: number;
   createdAt: string;
   latestVersion: VersionSummary;
+  // What a parent is reading, which stops being the newest version the moment
+  // anybody saves an edit. Null when nothing has ever been published, never
+  // more than one: the database allows a single published version per document.
+  publishedVersion: VersionSummary | null;
 };
 
 export type DocumentDetail = {
   id: number;
   createdAt: string;
   latestVersion: VersionDetail;
+  publishedVersion: VersionSummary | null;
 };
+
+/**
+ * The state of the DOCUMENT, which is not the state of its newest version.
+ *
+ * A document with a published version 1 and a draft version 2 is published:
+ * that is what a parent gets when they ask. Reading the newest version's
+ * status instead made the panel answer "szkic" for a document it was actively
+ * serving, which is the one thing the status is on screen to prevent.
+ */
+export function documentState(document: DocumentSummary): DocumentStatus {
+  return document.publishedVersion !== null ? "published" : document.latestVersion.status;
+}
+
+/** Whether newer, unpublished work is waiting behind what parents can see. */
+export function hasUnpublishedChanges(document: DocumentSummary): boolean {
+  return (
+    document.publishedVersion !== null &&
+    document.publishedVersion.versionNumber !== document.latestVersion.versionNumber
+  );
+}
+
+/**
+ * Whether a status filter should list this document.
+ *
+ * Either answer counts, and that is the point: a document with a published
+ * version 1 behind a draft version 2 genuinely is both published and has a
+ * draft. Matching only `documentState` made three of the four filter values
+ * unable to reach any document that had ever been published, so "which
+ * documents have work waiting to go live" became unanswerable on the one
+ * screen built to answer it.
+ */
+export function matchesStatus(document: DocumentSummary, status: DocumentStatus): boolean {
+  return documentState(document) === status || document.latestVersion.status === status;
+}
+
+/**
+ * Every title this document is findable by.
+ *
+ * The published version's title too, because it can differ from the newest
+ * one: retitle a published document and a colleague searching for the title
+ * parents actually see would otherwise be told nothing matches.
+ */
+export function searchableTitles(document: DocumentSummary): string[] {
+  const titles = [document.latestVersion.title];
+  if (document.publishedVersion !== null) {
+    titles.push(document.publishedVersion.title);
+  }
+  return titles;
+}
 
 /** What one save carries. `changeComment` is the editor's note, always optional. */
 export type DocumentContent = {
@@ -61,6 +115,7 @@ type RawDocument = {
   id: number;
   created_at: string;
   latest_version: RawVersion;
+  published_version: RawVersion | null;
 };
 
 function toSummary(raw: RawVersion): VersionSummary {
@@ -80,11 +135,24 @@ function toDetail(raw: RawVersion): VersionDetail {
   return { ...toSummary(raw), content: raw.content ?? "" };
 }
 
+/**
+ * A version that may not be there at all.
+ *
+ * Absent and null both mean "nothing is published". Tolerating absence is not
+ * defensive clutter: this is the only field on the response whose whole point
+ * is that it is often missing, and reading it as a crash rather than as an
+ * answer would take out the list screen instead of the one sentence on it.
+ */
+function toSummaryOrNull(raw: RawVersion | null | undefined): VersionSummary | null {
+  return raw ? toSummary(raw) : null;
+}
+
 function toDocument(raw: RawDocument): DocumentDetail {
   return {
     id: raw.id,
     createdAt: raw.created_at,
     latestVersion: toDetail(raw.latest_version),
+    publishedVersion: toSummaryOrNull(raw.published_version),
   };
 }
 
@@ -102,6 +170,7 @@ export async function listDocuments(signal?: AbortSignal): Promise<DocumentSumma
     id: row.id,
     createdAt: row.created_at,
     latestVersion: toSummary(row.latest_version),
+    publishedVersion: toSummaryOrNull(row.published_version),
   }));
 }
 

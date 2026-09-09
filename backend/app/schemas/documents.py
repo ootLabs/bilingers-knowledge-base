@@ -121,13 +121,21 @@ class DocumentVersionDetailResponse(DocumentVersionSummaryResponse):
 
 
 class DocumentSummaryResponse(BaseModel):
-    """A list row: the document plus whatever its newest version says."""
+    """A list row: the document, its newest version, and its published one.
+
+    Both, because they answer different questions: the newest version is what
+    an editor would open, and the published one is what a parent is reading.
+    They are the same row only until somebody saves an edit.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     created_at: datetime
     latest_version: DocumentVersionSummaryResponse
+    # Null when nothing has ever been published. Never a list: at most one
+    # version of a document may be published at a time.
+    published_version: DocumentVersionSummaryResponse | None
 
 
 class DocumentDetailResponse(BaseModel):
@@ -138,3 +146,4 @@ class DocumentDetailResponse(BaseModel):
     id: int
     created_at: datetime
     latest_version: DocumentVersionDetailResponse
+    published_version: DocumentVersionSummaryResponse | None

@@ -56,6 +56,7 @@ describe("NewDocumentForm", () => {
         publishedAt: null,
         publishedByEmail: null,
       },
+      publishedVersion: null,
     });
     render(<NewDocumentForm />);
 

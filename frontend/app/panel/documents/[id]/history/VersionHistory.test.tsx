@@ -56,7 +56,7 @@ function detail(versionNumber: number, content: string): VersionDetail {
 }
 
 function document(latest: VersionDetail): DocumentDetail {
-  return { id: 1, createdAt: "2026-09-01T09:00:00Z", latestVersion: latest };
+  return { id: 1, createdAt: "2026-09-01T09:00:00Z", latestVersion: latest, publishedVersion: null };
 }
 
 const CURRENT = detail(3, "Wstep\nTresc trzeciej wersji\nKoniec");

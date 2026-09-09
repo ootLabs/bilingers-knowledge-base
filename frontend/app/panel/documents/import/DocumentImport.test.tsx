@@ -100,6 +100,7 @@ describe("DocumentImport", () => {
         publishedAt: null,
         publishedByEmail: null,
       },
+      publishedVersion: null,
     });
     render(<DocumentImport />);
     upload();
@@ -130,6 +131,7 @@ describe("DocumentImport", () => {
           publishedAt: null,
           publishedByEmail: null,
         },
+        publishedVersion: null,
       },
     ]);
     previewImportMock.mockResolvedValue(PREVIEW);

@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, aliased
 
-from app.models.document import Document, DocumentVersion
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.panel import PanelUser
 from app.services.documents import (
     DocumentDetail,
@@ -25,10 +25,18 @@ from app.services.documents import (
 )
 from app.services.panel_errors import unavailable_on_database_failure
 
-# Two joins to the same table, so two aliases. Module level, because the alias
-# in the SELECT list and the one in the JOIN have to be the same object.
+# Several joins to the same two tables, so an alias each. Module level, because
+# the alias in the SELECT list and the one in the JOIN have to be the same
+# object.
 _AUTHOR = aliased(PanelUser)
 _PUBLISHER = aliased(PanelUser)
+
+# The published version of a document, joined alongside its newest one, plus
+# the two people on it. A separate set of aliases because a row carries both
+# versions at once and they are rarely the same one.
+_LIVE = aliased(DocumentVersion)
+_LIVE_AUTHOR = aliased(PanelUser)
+_LIVE_PUBLISHER = aliased(PanelUser)
 
 
 def _versions_with_people() -> Select[tuple[DocumentVersion, str | None, str | None]]:
@@ -74,11 +82,29 @@ def list_documents(session: Session) -> list[DocumentSummary]:
     ).subquery()
 
     rows = session.execute(
-        select(Document, DocumentVersion, _AUTHOR.email, _PUBLISHER.email)
+        select(
+            Document,
+            DocumentVersion,
+            _AUTHOR.email,
+            _PUBLISHER.email,
+            _LIVE,
+            _LIVE_AUTHOR.email,
+            _LIVE_PUBLISHER.email,
+        )
         .join(DocumentVersion, DocumentVersion.document_id == Document.id)
         .join(ranked, ranked.c.version_id == DocumentVersion.id)
         .outerjoin(_AUTHOR, _AUTHOR.id == DocumentVersion.author_id)
         .outerjoin(_PUBLISHER, _PUBLISHER.id == DocumentVersion.published_by_id)
+        # The published version in the same query rather than a second one, and
+        # it cannot multiply the rows: the partial unique index allows at most
+        # one published version per document. A join instead of a lookup per
+        # row is the whole reason this function exists.
+        .outerjoin(
+            _LIVE,
+            (_LIVE.document_id == Document.id) & (_LIVE.status == DocumentStatus.PUBLISHED),
+        )
+        .outerjoin(_LIVE_AUTHOR, _LIVE_AUTHOR.id == _LIVE.author_id)
+        .outerjoin(_LIVE_PUBLISHER, _LIVE_PUBLISHER.id == _LIVE.published_by_id)
         .where(ranked.c.position == 1)
         # Newest change first: the list answers "what moved lately", and the id
         # breaks ties so two saves in the same second do not order themselves
@@ -91,9 +117,43 @@ def list_documents(session: Session) -> list[DocumentSummary]:
             id=document.id,
             created_at=document.created_at,
             latest_version=summary_of(version, author_email, publisher_email),
+            published_version=(
+                None
+                if live is None
+                else summary_of(live, live_author_email, live_publisher_email)
+            ),
         )
-        for document, version, author_email, publisher_email in rows
+        for (
+            document,
+            version,
+            author_email,
+            publisher_email,
+            live,
+            live_author_email,
+            live_publisher_email,
+        ) in rows
     ]
+
+
+def _published_version(session: Session, document_id: int) -> VersionSummary | None:
+    """Whichever version of this document parents are reading, if any.
+
+    No ordering and no limit: the partial unique index means the answer is one
+    row or none. Kept separate from the newest version, because after any save
+    the two are different rows and conflating them is what made the panel
+    report a document as unpublished while its published version was still
+    being served.
+    """
+    row = session.execute(
+        _versions_with_people().where(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.status == DocumentStatus.PUBLISHED,
+        )
+    ).first()
+    if row is None:
+        return None
+    version, author_email, publisher_email = row
+    return summary_of(version, author_email, publisher_email)
 
 
 @unavailable_on_database_failure
@@ -113,6 +173,9 @@ def get_document(session: Session, document_id: int) -> DocumentDetail:
         id=document.id,
         created_at=document.created_at,
         latest_version=detail_of(version, author_email, publisher_email),
+        # A second query here, unlike the list: this reads one document, so the
+        # cost is one statement rather than one per row.
+        published_version=_published_version(session, document_id),
     )
 
 
