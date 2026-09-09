@@ -66,6 +66,11 @@ export function toPanelFailure(error: unknown): PanelFailure {
 // HttpOnly cookie) is recorded in docs/architecture.md, together with what it
 // costs.
 const TOKEN_KEY = "bilingers.panel.token";
+// Beside the token, and cleared with it. Only the navigation reads it, to
+// decide whether to offer the journal, which is administrators only. It is a
+// hint for the screen and never a permission: the backend answers 403 to an
+// editor whatever this says, the same standing as `PanelGuard`.
+const ROLE_KEY = "bilingers.panel.role";
 
 function tokenStore(): Storage | null {
   // Absent during prerender, and it throws outright in a browser configured to
@@ -91,9 +96,27 @@ export function storePanelToken(token: string): void {
   }
 }
 
+/** Which role the screen should draw for. Absent means "assume the least". */
+export function readPanelRole(): string | null {
+  const value = tokenStore()?.getItem(ROLE_KEY) ?? null;
+  return value === "" ? null : value;
+}
+
+function storePanelRole(role: string): void {
+  try {
+    tokenStore()?.setItem(ROLE_KEY, role);
+  } catch {
+    // Same as the token: worth nothing to fail a login over.
+  }
+}
+
 export function clearPanelToken(): void {
   try {
-    tokenStore()?.removeItem(TOKEN_KEY);
+    const store = tokenStore();
+    store?.removeItem(TOKEN_KEY);
+    // Together, always. A role left behind after the token is gone would draw
+    // an administrator's navigation for whoever logs in next on this tab.
+    store?.removeItem(ROLE_KEY);
   } catch {
     // Nothing to do: the token was already unreachable.
   }
@@ -186,6 +209,7 @@ export async function panelLogin({
     user: { email: string; role: string };
   };
   storePanelToken(body.token);
+  storePanelRole(body.user.role);
   return {
     token: body.token,
     expiresAt: body.expires_at,
