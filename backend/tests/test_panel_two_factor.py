@@ -7,6 +7,7 @@ second factor a second factor rather than a formality.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote, urlparse
 
 import pyotp
@@ -19,7 +20,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelUser
 from app.models.two_factor import PanelTotpSecret
+from app.services import panel_two_factor
 from app.services.panel_auth import LoginFailure
+from app.services.panel_two_factor import _TOTP_INTERVAL
 from tests.conftest import (
     ADMIN_PASSWORD,
     EDITOR_PASSWORD,
@@ -35,6 +38,26 @@ def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         settings, "panel_totp_encryption_key", Fernet.generate_key().decode("ascii")
     )
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, datetime]:
+    """A clock the test moves by hand, for the service only.
+
+    Reaching the step either side of the current one is the whole point of the
+    replay rule, and waiting half a minute inside a test is not an option.
+    `pyotp` keeps its own reference to `datetime`, so codes are still generated
+    against the real clock and the test says which moment it wants one for.
+    """
+    state = {"now": datetime.now(UTC)}
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:  # type: ignore[override]
+            return state["now"]
+
+    monkeypatch.setattr(panel_two_factor, "datetime", Clock)
+    return state
 
 
 def enrol(client: TestClient, token: str) -> str:
@@ -146,6 +169,32 @@ class TestTurningItOn:
         assert response.headers["X-Second-Factor"] == "not-configured"
         assert panel_db.execute(select(PanelTotpSecret)).first() is None
 
+    def test_a_rotated_key_says_so_on_the_login_endpoint_too(
+        self,
+        encryption_key: None,
+        panel_client: TestClient,
+        panel_editor: PanelUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An enrolled account whose secret can no longer be decrypted is the
+        one place this condition reaches somebody who is not in the settings
+        screen. It has to carry the same header: without it the frontend reads
+        the 503 as a database outage and tells the editor to try again in a
+        moment, which is advice about something that will never fix itself."""
+        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
+        secret, _codes = turn_on(panel_client, token)
+        monkeypatch.setattr(
+            settings, "panel_totp_encryption_key", Fernet.generate_key().decode("ascii")
+        )
+
+        response = sign_in(
+            panel_client, panel_editor.email, EDITOR_PASSWORD, pyotp.TOTP(secret).now()
+        )
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == "two_factor_not_configured"
+        assert response.headers["X-Second-Factor"] == "not-configured"
+
 
 class TestLoggingInWithIt:
     def test_the_password_alone_stops_being_enough(
@@ -193,6 +242,32 @@ class TestLoggingInWithIt:
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
         ).status_code == 201
+        assert sign_in(
+            panel_client, panel_editor.email, EDITOR_PASSWORD, code
+        ).status_code == 401
+
+    def test_a_spent_code_stays_spent_once_the_clock_rolls_over(
+        self,
+        encryption_key: None,
+        frozen_clock: dict[str, datetime],
+        panel_client: TestClient,
+        panel_editor: PanelUser,
+    ) -> None:
+        """The step recorded has to be the step the CODE belongs to, not the one
+        the clock happens to be in. `valid_window=1` keeps six digits verifiable
+        for the step either side of their own, so recording the clock's step let
+        the same digits back in the moment it rolled over: spent at step N, and
+        at N+1 they verified again and N+1 > N passed the replay check. Sixty
+        seconds of reuse for something the module promises is single use."""
+        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
+        secret, _codes = turn_on(panel_client, token)
+        code = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
+
+        assert sign_in(
+            panel_client, panel_editor.email, EDITOR_PASSWORD, code
+        ).status_code == 201
+
+        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
         ).status_code == 401

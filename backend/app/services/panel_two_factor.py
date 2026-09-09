@@ -87,6 +87,7 @@ def _secret_row(session: Session, user: PanelUser) -> PanelTotpSecret | None:
     ).scalar_one_or_none()
 
 
+@unavailable_on_database_failure
 def has_second_factor(session: Session, user: PanelUser) -> bool:
     """Whether logging in as this account needs a code.
 
@@ -156,6 +157,30 @@ def _decrypt(row: PanelTotpSecret) -> str:
         raise TwoFactorNotConfigured("stored secret cannot be read with this key") from error
 
 
+def _matched_step(secret: str, code: str) -> int | None:
+    """Which time step these digits belong to, or None if they belong to none.
+
+    The step the CODE belongs to, not the step the clock happens to be in, and
+    that distinction is the whole point. `verify(valid_window=1)` accepts the
+    previous and the next step as well, so recording the current clock step
+    would let the same digits through again the moment the clock rolled over:
+    used at step N it stored N, and at step N+1 the same code still verified
+    and N+1 > N passed the replay check. Sixty seconds of reuse for something
+    the comment below promises is single use.
+    """
+    totp = pyotp.TOTP(secret, interval=_TOTP_INTERVAL)
+    current = int(datetime.now(UTC).timestamp()) // _TOTP_INTERVAL
+    for step in range(current - _TOTP_WINDOW, current + _TOTP_WINDOW + 1):
+        # An aware timestamp, so pyotp converts through UTC rather than through
+        # the container's local time: the naive path goes via `mktime`, which
+        # picks the wrong offset for an ambiguous hour when a DST change lands
+        # in it, and every code would be refused for that hour.
+        moment = datetime.fromtimestamp(step * _TOTP_INTERVAL, UTC)
+        if totp.verify(code, for_time=moment):
+            return step
+    return None
+
+
 def _totp_matches(row: PanelTotpSecret, code: str) -> bool:
     """Check a six-digit code, refusing one that has already been spent.
 
@@ -163,10 +188,9 @@ def _totp_matches(row: PanelTotpSecret, code: str) -> bool:
     they belong to, so anybody who read them over a shoulder gets a second use
     out of them.
     """
-    totp = pyotp.TOTP(_decrypt(row), interval=_TOTP_INTERVAL)
-    if not totp.verify(code, valid_window=_TOTP_WINDOW):
+    step = _matched_step(_decrypt(row), code)
+    if step is None:
         return False
-    step = int(datetime.now(UTC).timestamp()) // _TOTP_INTERVAL
     if row.last_used_step is not None and step <= row.last_used_step:
         return False
     row.last_used_step = step
@@ -298,6 +322,7 @@ def _forget(session: Session, user: PanelUser) -> None:
     # that still holds the account object.
 
 
+@unavailable_on_database_failure
 def unused_backup_code_count(session: Session, user: PanelUser) -> int:
     """How many printed codes are still worth anything, for the settings screen."""
     return session.execute(
