@@ -96,7 +96,11 @@ def list_panel_users(session: Session) -> list[PanelUser]:
     return list(session.execute(select(PanelUser).order_by(PanelUser.id)).scalars())
 
 
+@unavailable_on_database_failure
 def get_panel_user(session: Session, user_id: int) -> PanelUser:
+    """One account by id. Decorated because `panel_two_factor`'s reset route
+    calls it straight from the handler, so this is a service boundary a request
+    is entered through and a dropped connection here has to answer 503."""
     user = session.get(PanelUser, user_id)
     if user is None:
         raise PanelUserNotFound(str(user_id))
