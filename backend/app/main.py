@@ -15,6 +15,7 @@ from app.routers import (
     panel_users,
 )
 from app.services.panel_errors import PanelServiceUnavailable
+from app.services.panel_two_factor import TwoFactorNotConfigured
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
@@ -63,6 +64,31 @@ def panel_service_unavailable(
     say what it swallowed.
     """
     return JSONResponse(status_code=503, content={"detail": "database_unavailable"})
+
+
+@app.exception_handler(TwoFactorNotConfigured)
+def two_factor_not_configured(
+    _request: Request, _error: TwoFactorNotConfigured
+) -> JSONResponse:
+    """No usable TOTP encryption key, wherever the panel noticed.
+
+    503 rather than 500: the deployment is missing a key, which is an
+    operator's problem and not the caller's, and it is fixable without a code
+    change. The header is what tells this 503 apart from a database outage for
+    a frontend that never reads a failed response's body, and it is the header
+    already listed in `expose_headers` above.
+
+    Registered here rather than translated per router, and that is the whole
+    point of moving it: the same exception reaches `/api/panel/sessions` (an
+    enrolled account logging in after the key was rotated) and four routes
+    under `/users/me/two-factor`, and translating it five times is four places
+    to get it right and one to forget the header in. Login was that one.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "two_factor_not_configured"},
+        headers={"X-Second-Factor": "not-configured"},
+    )
 
 
 @app.get("/")

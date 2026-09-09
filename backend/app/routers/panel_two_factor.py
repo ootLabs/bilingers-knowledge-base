@@ -28,7 +28,6 @@ from app.services.panel_audit import record_event
 from app.services.panel_two_factor import (
     InvalidSecondFactor,
     TwoFactorAlreadyOn,
-    TwoFactorNotConfigured,
     TwoFactorNotEnrolled,
     begin_enrolment,
     confirm_enrolment,
@@ -55,23 +54,10 @@ _NOT_ENROLLED = {409: {"description": "Nothing is enrolled for this account."}}
 # it would sign the editor out for mistyping a code.
 _BAD_CODE = {422: {"description": "The code does not match."}}
 
-
-def _not_configured() -> HTTPException:
-    # 503, not 500: the deployment is missing a key, which is an operator's
-    # problem and not the caller's, and it is fixable without a code change.
-    #
-    # The header is what makes it tellable apart from the other 503 these
-    # endpoints can answer, a database outage, without the frontend reading a
-    # failed response's body (the rule set on 2026-09-02). Same mechanism and
-    # same header as "this account needs a second factor", so it is already in
-    # the CORS `expose_headers` list in `app.main`. Without it a missing key
-    # reaches the editor as "try again in a moment", which is advice about
-    # something that will never fix itself.
-    return HTTPException(
-        status_code=503,
-        detail="two_factor_not_configured",
-        headers={"X-Second-Factor": "not-configured"},
-    )
+# `TwoFactorNotConfigured` is deliberately not caught in this file. It becomes a
+# 503 carrying `X-Second-Factor: not-configured` in the app-level handler in
+# `app.main`, which is also what answers it on the login endpoint: the same
+# condition reached from five routes, translated once.
 
 
 @router.get("/users/me/two-factor", response_model=TwoFactorStatusResponse)
@@ -105,8 +91,6 @@ def start_enrolment(
         enrolment = begin_enrolment(session, user)
     except TwoFactorAlreadyOn as error:
         raise HTTPException(status_code=409, detail="two_factor_already_on") from error
-    except TwoFactorNotConfigured as error:
-        raise _not_configured() from error
     return TwoFactorEnrolmentResponse(
         secret=enrolment.secret, otpauth_uri=enrolment.otpauth_uri
     )
@@ -135,8 +119,6 @@ def confirm(
         raise HTTPException(status_code=409, detail="two_factor_already_on") from error
     except InvalidSecondFactor as error:
         raise HTTPException(status_code=422, detail="invalid_code") from error
-    except TwoFactorNotConfigured as error:
-        raise _not_configured() from error
 
     record_event(session, actor=user, action=AuditAction.TWO_FACTOR_ENABLED)
     return BackupCodesResponse(codes=codes)
@@ -161,8 +143,6 @@ def disable(
         raise HTTPException(status_code=409, detail="two_factor_not_enrolled") from error
     except InvalidSecondFactor as error:
         raise HTTPException(status_code=422, detail="invalid_code") from error
-    except TwoFactorNotConfigured as error:
-        raise _not_configured() from error
 
     record_event(session, actor=user, action=AuditAction.TWO_FACTOR_DISABLED)
     return Response(status_code=204)

@@ -29,14 +29,13 @@ from app.services.panel_auth import (
     login,
     record_throttled_attempt,
 )
-from app.services.panel_sessions import revoke_session
-from app.services.panel_two_factor import TwoFactorNotConfigured
 from app.services.panel_audit import record_event
 from app.services.panel_passwords import (
     InvalidPasswordResetToken,
     change_password,
     set_password_with_token,
 )
+from app.services.panel_sessions import revoke_session
 from app.services.rate_limit import TooManyAttempts
 from app.services.rate_limit import check as check_ip_rate_limit
 
@@ -98,6 +97,14 @@ def open_session(
     addresses; the IP throttle is what stops that cost being spent on a flood.
     A throttled attempt still leaves one audit row per address per window, so
     a flood is visible in `panel_login_attempts` rather than silent.
+
+    `TwoFactorNotConfigured` is deliberately not caught here. An enrolled
+    account logging in after the TOTP key was rotated away reaches it, and the
+    app-level handler in `app.main` answers 503 with the
+    `X-Second-Factor: not-configured` header the frontend reads to tell it
+    apart from a database outage. Translating it locally is how this endpoint
+    ended up answering a bare 503, which reads on screen as "try again in a
+    moment" for something that will never fix itself.
     """
     ip = _client_ip(request)
     if ip is not None:
@@ -134,11 +141,6 @@ def open_session(
             ip_address=ip,
             user_agent=request.headers.get("user-agent") or None,
         )
-    except TwoFactorNotConfigured as error:
-        # The account has a second factor and the server cannot read it: the
-        # key is missing or was rotated. An outage, not a wrong password, and
-        # answering 401 would send the editor to reset a password that is fine.
-        raise HTTPException(status_code=503, detail="two_factor_not_configured") from error
     except SecondFactorRequired as error:
         # The one refusal with its own key. It is only reachable by somebody who
         # already typed the correct password, so it gives away nothing they did
