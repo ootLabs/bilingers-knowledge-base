@@ -27,6 +27,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
+from app.services.panel_columns import (
+    EMAIL_LIMIT,
+    IP_ADDRESS_LIMIT,
+    USER_AGENT_LIMIT,
+    truncated,
+)
 from app.services.panel_errors import unavailable_on_database_failure
 from app.services.panel_two_factor import has_second_factor, verify_second_factor
 
@@ -89,18 +95,6 @@ def as_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
-_EMAIL_LIMIT = 320
-_IP_ADDRESS_LIMIT = 45
-_USER_AGENT_LIMIT = 255
-
-
-def _truncated(value: str | None, limit: int) -> str | None:
-    """Cut a value to what its column holds, keyed by this one function so a
-    limit only ever has to be gotten right in one place, not wherever a
-    caller happens to build the row."""
-    return value[:limit] if value else None
-
-
 def _record_attempt(
     session: Session,
     *,
@@ -117,12 +111,12 @@ def _record_attempt(
     # happens to trim the value on its way in.
     session.add(
         PanelLoginAttempt(
-            email=_truncated(email, _EMAIL_LIMIT),
+            email=truncated(email, EMAIL_LIMIT),
             panel_user_id=user.id if user is not None else None,
             succeeded=succeeded,
             reason=reason,
-            ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
-            user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
+            ip_address=truncated(ip_address, IP_ADDRESS_LIMIT),
+            user_agent=truncated(user_agent, USER_AGENT_LIMIT),
         )
     )
 
@@ -350,8 +344,8 @@ def login(
         panel_user=user,
         token_hash=hash_token(token),
         expires_at=now + timedelta(minutes=settings.panel_session_ttl_minutes),
-        ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
-        user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
+        ip_address=truncated(ip_address, IP_ADDRESS_LIMIT),
+        user_agent=truncated(user_agent, USER_AGENT_LIMIT),
     )
     user.failed_login_count = 0
     user.locked_until = None

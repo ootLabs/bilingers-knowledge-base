@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.models.audit import AuditAction, PanelAuditEvent
 from app.models.panel import PanelLoginAttempt, PanelUser
+from app.services.panel_columns import DETAIL_LIMIT, EMAIL_LIMIT, required, truncated
 from app.services.panel_errors import unavailable_on_database_failure
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,6 @@ logger = logging.getLogger(__name__)
 # rows to a browser, not about navigation.
 DEFAULT_LIMIT = 200
 MAX_LIMIT = 1000
-
-_DETAIL_LIMIT = 255
-_EMAIL_LIMIT = 320
 
 
 @dataclass(frozen=True)
@@ -77,11 +75,11 @@ def record_event(
         session.add(
             PanelAuditEvent(
                 actor_id=actor.id,
-                actor_email=actor.email[:_EMAIL_LIMIT],
+                actor_email=required(actor.email, EMAIL_LIMIT),
                 action=action,
                 subject_type=subject_type,
                 subject_id=subject_id,
-                detail=detail[:_DETAIL_LIMIT] if detail else None,
+                detail=truncated(detail, DETAIL_LIMIT),
             )
         )
         session.commit()
