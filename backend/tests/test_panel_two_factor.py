@@ -66,13 +66,22 @@ def enrol(client: TestClient, token: str) -> str:
     return response.json()["secret"]
 
 
-def turn_on(client: TestClient, token: str) -> tuple[str, list[str]]:
-    """Enrol and confirm, returning the secret and the printed codes."""
+def turn_on(
+    client: TestClient, token: str, moment: datetime | None = None
+) -> tuple[str, list[str]]:
+    """Enrol and confirm, returning the secret and the printed codes.
+
+    `moment` is which step the confirming code belongs to. It matters because
+    confirming spends that step, so a test that then signs in has to move the
+    clock and ask for a code at the new moment; passing the same one back would
+    be asking for the code that was just used up.
+    """
     secret = enrol(client, token)
+    totp = pyotp.TOTP(secret, interval=_TOTP_INTERVAL)
     response = client.post(
         "/api/panel/users/me/two-factor/confirm",
         headers=auth_header(token),
-        json={"code": pyotp.TOTP(secret).now()},
+        json={"code": totp.at(moment) if moment is not None else totp.now()},
     )
     assert response.status_code == 200, response.text
     return secret, response.json()["codes"]
@@ -218,26 +227,61 @@ class TestLoggingInWithIt:
         assert LoginFailure.SECOND_FACTOR_REQUIRED in reasons
 
     def test_a_live_code_gets_in(
-        self, encryption_key: None, panel_client: TestClient, panel_editor: PanelUser
+        self,
+        encryption_key: None,
+        frozen_clock: dict[str, datetime],
+        panel_client: TestClient,
+        panel_editor: PanelUser,
     ) -> None:
+        """A step later than the one confirmation spent, which is how a real
+        login looks: the setup screen is finished before anybody signs in."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        secret, _codes = turn_on(panel_client, token)
+        secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
 
+        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
         response = sign_in(
-            panel_client, panel_editor.email, EDITOR_PASSWORD, pyotp.TOTP(secret).now()
+            panel_client,
+            panel_editor.email,
+            EDITOR_PASSWORD,
+            pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"]),
         )
 
         assert response.status_code == 201
         assert response.json()["token"]
 
+    def test_the_code_that_switched_it_on_cannot_then_log_in(
+        self,
+        encryption_key: None,
+        frozen_clock: dict[str, datetime],
+        panel_client: TestClient,
+        panel_editor: PanelUser,
+    ) -> None:
+        """Confirmation is a use like any other, so it spends the code.
+
+        This is the one code the panel ever puts on a screen, next to the key
+        somebody may be reading over a shoulder. Leaving it unspent made it the
+        only code that worked twice."""
+        token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
+        secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
+        used = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
+
+        assert sign_in(
+            panel_client, panel_editor.email, EDITOR_PASSWORD, used
+        ).status_code == 401
+
     def test_the_same_six_digits_do_not_work_twice(
-        self, encryption_key: None, panel_client: TestClient, panel_editor: PanelUser
+        self,
+        encryption_key: None,
+        frozen_clock: dict[str, datetime],
+        panel_client: TestClient,
+        panel_editor: PanelUser,
     ) -> None:
         """Otherwise anybody who read them over a shoulder gets a second use out
         of them, inside the same 30 second window."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        secret, _codes = turn_on(panel_client, token)
-        code = pyotp.TOTP(secret).now()
+        secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
+        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
+        code = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
 
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
@@ -260,7 +304,8 @@ class TestLoggingInWithIt:
         at N+1 they verified again and N+1 > N passed the replay check. Sixty
         seconds of reuse for something the module promises is single use."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        secret, _codes = turn_on(panel_client, token)
+        secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
+        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
         code = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
 
         assert sign_in(
@@ -325,12 +370,16 @@ class TestLoggingInWithIt:
 
 class TestTurningItOffAndRecovering:
     def test_switching_it_off_needs_a_code(
-        self, encryption_key: None, panel_client: TestClient, panel_editor: PanelUser
+        self,
+        encryption_key: None,
+        frozen_clock: dict[str, datetime],
+        panel_client: TestClient,
+        panel_editor: PanelUser,
     ) -> None:
         """A stolen session must not be able to quietly remove the thing that
         makes it useless."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
-        secret, _codes = turn_on(panel_client, token)
+        secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
 
         refused = panel_client.post(
             "/api/panel/users/me/two-factor/disable",
@@ -339,10 +388,12 @@ class TestTurningItOffAndRecovering:
         )
         assert refused.status_code == 422
 
+        # A fresh step, because confirming spent the previous one.
+        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
         accepted = panel_client.post(
             "/api/panel/users/me/two-factor/disable",
             headers=auth_header(token),
-            json={"code": pyotp.TOTP(secret).now()},
+            json={"code": pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])},
         )
         assert accepted.status_code == 204
 

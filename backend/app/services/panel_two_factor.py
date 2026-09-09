@@ -248,9 +248,11 @@ def confirm_enrolment(session: Session, user: PanelUser, code: str) -> list[str]
         raise TwoFactorNotEnrolled(user.email)
     if row.confirmed_at is not None:
         raise TwoFactorAlreadyOn(user.email)
-    if not pyotp.TOTP(_decrypt(row), interval=_TOTP_INTERVAL).verify(
-        code, valid_window=_TOTP_WINDOW
-    ):
+    # Through `_totp_matches`, so the step is spent like any other. A raw
+    # `verify` here left `last_used_step` NULL, which meant the one code this
+    # module ever shows on screen was the one code it did not spend: whoever
+    # read it over a shoulder could send it straight to the login endpoint.
+    if not _totp_matches(row, code):
         raise InvalidSecondFactor(user.email)
 
     row.confirmed_at = datetime.now(UTC)
