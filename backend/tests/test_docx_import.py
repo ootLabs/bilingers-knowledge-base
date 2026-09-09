@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.models.panel import PanelUser
+from app.schemas.documents import DocumentContentRequest
 from app.services.docx_import import (
     REASON_TABLE,
     REASON_UNREADABLE,
@@ -109,6 +110,23 @@ class TestReadingAFile:
         )
 
         assert result.title == "Pierwsze zdanie materialu."
+
+    def test_a_heading_laid_out_with_a_tab_still_makes_a_savable_title(self) -> None:
+        """Word writes numbered headings as "Rozdzial<tab>Tytul", and python-docx
+        reads `<w:tab/>` back as a real tab. `app.schemas.documents` refuses a
+        tab in a title, so a preview that handed one over produced a proposal
+        the save endpoint answered 422 to, about a character nobody can see."""
+        result = read_document(
+            docx(
+                '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r>'
+                "<w:t>Rozdzial 1</w:t><w:tab/><w:t>Kiedy zaczac</w:t>"
+                "</w:r></w:p>" + paragraph("Tresc rozdzialu.")
+            ),
+            max_bytes=1_000_000,
+        )
+
+        assert result.title == "Rozdzial 1 Kiedy zaczac"
+        DocumentContentRequest(title=result.title, content=result.content)
 
 
 class TestResilience:

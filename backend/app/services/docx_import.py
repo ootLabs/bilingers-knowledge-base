@@ -147,7 +147,9 @@ def read_document(data: bytes, *, max_bytes: int) -> ImportedDocument:
             lines.append(text)
             paragraphs += 1
         else:
-            lines.append(f"{'#' * level} {text}")
+            # A heading is one line by definition, and the marker in front of
+            # it only means anything while it stays on that line.
+            lines.append(f"{'#' * level} {_single_line(text)}")
             headings += 1
 
     skipped: list[SkippedItem] = []
@@ -171,6 +173,20 @@ def read_document(data: bytes, *, max_bytes: int) -> ImportedDocument:
     )
 
 
+def _single_line(text: str) -> str:
+    """One line, whatever whitespace Word had in it.
+
+    A title is a single line everywhere else in the system: `app.schemas.
+    documents` refuses a tab or a line break in one, and python-docx turns
+    Word's `<w:tab/>` into `\\t` and `<w:br/>` into `\\n` when it reads a
+    paragraph. A heading written as "Rozdzial<tab>pierwszy", which is how Word
+    lays out numbered headings, therefore produced a preview title the save
+    endpoint answered 422 to, with the editor told to check that the title
+    "fits on one line" about a character she cannot see.
+    """
+    return " ".join(text.split())
+
+
 def _title_from(lines: list[str]) -> str:
     """The document's own first heading, or its first line of text.
 
@@ -180,5 +196,5 @@ def _title_from(lines: list[str]) -> str:
     """
     for line in lines:
         if line.startswith("#"):
-            return line.lstrip("#").strip()[:_TITLE_LIMIT]
-    return lines[0][:_TITLE_LIMIT]
+            return _single_line(line.lstrip("#"))[:_TITLE_LIMIT]
+    return _single_line(lines[0])[:_TITLE_LIMIT]
