@@ -108,6 +108,14 @@ const pl = {
   // żadnych identyfikatorów technicznych, żadnego żargonu, każdy komunikat
   // mówi co się stało i co z tym zrobić.
   panel: {
+    nav: {
+      ariaLabel: "Nawigacja panelu",
+      documents: "Dokumenty",
+      security: "Bezpieczeństwo",
+      audit: "Dziennik zmian",
+      signOut: "Wyloguj się",
+      signingOut: "Wylogowujemy...",
+    },
     checking: {
       title: "Sprawdzamy dostęp",
       description: "Za chwilę otworzymy panel albo poprosimy o zalogowanie.",
@@ -202,6 +210,12 @@ const pl = {
       orderOldest: "Od najstarszych zmian",
       changedOn: "Zmieniono",
       changedBy: "przez",
+      // Stan dokumentu to nie stan najnowszej wersji. Po zapisie edycji
+      // rodzice dalej czytają starszą, opublikowaną wersję, i to musi być
+      // widoczne bez klikania.
+      parentsRead: "Rodzice czytają wersję {version}.",
+      draftWaiting: "Nowsze zmiany czekają w szkicu (wersja {version}).",
+      parentsReadTitle: "Pod tytułem: {title}.",
       clearFilters: "Wyczyść filtry",
       loading: {
         title: "Wczytujemy dokumenty",
@@ -235,6 +249,10 @@ const pl = {
       saveSubmit: "Zapisz jako nową wersję",
       saving: "Zapisujemy...",
       editing: "Edytujesz wersję {version} z dnia {date}",
+      parentsReadOther:
+        "Rodzice czytają teraz wersję {version}. Ten zapis jej nie zmieni, dopóki nie opublikujesz nowej.",
+      nothingPublished:
+        "Żadna wersja tego dokumentu nie jest opublikowana, więc rodzice go jeszcze nie widzą.",
       lastSavedBy: "Ostatni zapis: {author}",
       editingPublished:
         "Uwaga: to jest wersja opublikowana, rodzice czytają ją w tej chwili. Twój zapis utworzy nowy szkic i nie zmieni tego, co widzą, dopóki go nie opublikujesz.",
@@ -296,6 +314,9 @@ const pl = {
       isPublished: "Dokument jest opublikowany, asystent już z niego korzysta.",
       isNotPublished:
         "Ta wersja nie jest opublikowana. Asystent na razie z niej nie korzysta i rodzice jej nie widzą.",
+      otherIsPublished:
+        "Opublikowana jest wersja {version}. To ją czytają rodzice, dopóki nie opublikujesz tej.",
+      noneIsPublished: "Żadna wersja tego dokumentu nie jest opublikowana.",
       publishedOn: "Opublikowano {date}, zrobiła to osoba: {author}.",
       unknownPublisher: "konto już nieistniejące",
       publish: "Opublikuj tę wersję",
