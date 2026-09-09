@@ -212,6 +212,31 @@ class TestTheJournalCannotBreakTheOperation:
         assert broken.rolled_back is True
         assert any("could not record audit event" in line for line in caplog.messages)
 
+    def test_a_rollback_that_also_fails_is_swallowed(
+        self, panel_db: Session, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The operation being described has already committed, so nothing here
+        may reach the caller. A rollback on a connection that has just dropped
+        raises a second driver exception (the hazard `panel_errors` documents),
+        and unguarded it turned a missing log line into a 500 for work that
+        actually succeeded."""
+        actor = make_panel_user(panel_db, email="ktos@fundacja.test", password=None)
+
+        class DeadSession:
+            def add(self, _row: object) -> None:
+                pass
+
+            def commit(self) -> None:
+                raise OperationalError("INSERT", {}, Exception("connection lost"))
+
+            def rollback(self) -> None:
+                raise OperationalError("ROLLBACK", {}, Exception("connection lost"))
+
+        with caplog.at_level(logging.ERROR, logger="app.services.panel_audit"):
+            record_event(DeadSession(), actor=actor, action=AuditAction.DOCUMENT_CREATED)
+
+        assert any("could not roll back" in line for line in caplog.messages)
+
     def test_the_actor_address_is_kept_beside_the_foreign_key(
         self, panel_client: TestClient, panel_admin: PanelUser
     ) -> None:

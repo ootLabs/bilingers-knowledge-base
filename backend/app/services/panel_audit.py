@@ -94,7 +94,16 @@ def record_event(
             subject_type,
             subject_id,
         )
-        session.rollback()
+        try:
+            session.rollback()
+        except SQLAlchemyError:
+            # The reason this whole block exists is that the operation being
+            # described has already committed, so nothing here may reach the
+            # caller. A rollback on a connection that has just dropped raises
+            # a second driver exception (the hazard `panel_errors` documents),
+            # and unguarded it would turn a missing log line into a 500 for
+            # work that actually succeeded.
+            logger.exception("could not roll back after a failed audit write")
 
 
 def _events_query() -> Select[tuple[datetime, str, str, str | None, int | None, str | None]]:
