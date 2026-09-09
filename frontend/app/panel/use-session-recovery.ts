@@ -15,6 +15,11 @@ import { clearPanelToken, type PanelFailure, toPanelFailure } from "@/lib/panel-
  * explaining itself. Every other failure comes back as a key for the caller to
  * render.
  *
+ * An abort is the other answer that is not a message. A superseded request is
+ * one the screen itself cancelled, so there is nothing to tell anybody; without
+ * this it would arrive as `unreachable` and put "check your internet
+ * connection" on a screen whose network is fine.
+ *
  * One hook rather than the same four lines on four screens: the screen that
  * forgot them would leave someone signed out staring at an error they cannot
  * act on.
@@ -33,6 +38,11 @@ export function useSessionRecovery(): (error: unknown) => PanelFailure | null {
   routerRef.current = router;
 
   return useCallback((error: unknown) => {
+    // Before `toPanelFailure`, which knows nothing about aborts and would call
+    // this an unreachable backend.
+    if (error instanceof Error && error.name === "AbortError") {
+      return null;
+    }
     const failure = toPanelFailure(error);
     if (failure === "not_authenticated") {
       clearPanelToken();

@@ -38,12 +38,12 @@ export default function VersionHistory({ documentId }: { documentId: number }) {
   const [failure, setFailure] = useState<PanelFailure | null>(null);
   const [restoredAs, setRestoredAs] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setState({ phase: "loading" });
     try {
       const [versions, document] = await Promise.all([
-        listVersions(documentId),
-        getDocument(documentId),
+        listVersions(documentId, signal),
+        getDocument(documentId, signal),
       ]);
       setState({ phase: "ready", versions, current: document.latestVersion });
     } catch (error) {
@@ -55,7 +55,9 @@ export default function VersionHistory({ documentId }: { documentId: number }) {
   }, [documentId, recover]);
 
   useEffect(() => {
-    void load();
+    const request = new AbortController();
+    void load(request.signal);
+    return () => request.abort();
   }, [load]);
 
   async function preview(versionNumber: number) {
