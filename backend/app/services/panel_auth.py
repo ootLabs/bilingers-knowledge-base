@@ -28,31 +28,18 @@ from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
 from app.services.panel_columns import (
-    EMAIL_LIMIT,
     IP_ADDRESS_LIMIT,
     USER_AGENT_LIMIT,
+    normalise_email,
     truncated,
 )
 from app.services.panel_errors import unavailable_on_database_failure
+from app.services.panel_login_audit import (
+    LoginFailure,
+    record_attempt,
+    record_throttled_attempt,
+)
 from app.services.panel_two_factor import has_second_factor, verify_second_factor
-
-
-class LoginFailure:
-    """Why an attempt failed, as stored in `panel_login_attempts.reason`.
-
-    Values, not an enum type in the database: see the column's comment in
-    `app.models.panel`. They are audit detail only and are never returned to
-    the client, which gets one generic answer instead.
-    """
-
-    UNKNOWN_ACCOUNT = "unknown_account"
-    BAD_PASSWORD = "bad_password"
-    NO_PASSWORD_SET = "no_password_set"
-    INACTIVE_ACCOUNT = "inactive_account"
-    LOCKED_ACCOUNT = "locked_account"
-    IP_THROTTLED = "ip_throttled"
-    SECOND_FACTOR_REQUIRED = "second_factor_required"
-    BAD_SECOND_FACTOR = "bad_second_factor"
 
 
 class AuthenticationFailed(Exception):
@@ -69,17 +56,6 @@ class SecondFactorRequired(Exception):
     """
 
 
-def normalise_email(email: str) -> str:
-    """Lowercase and strip, so one person cannot end up with two accounts.
-
-    The local part of an address is case sensitive per RFC 5321, but no mail
-    provider anyone here uses treats it that way, and two accounts differing
-    only in capitalisation would be a genuine security problem in a panel where
-    every account is known by name.
-    """
-    return email.strip().lower()
-
-
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -93,66 +69,6 @@ def as_utc(value: datetime) -> datetime:
     returning a wrong answer. Normalising on read keeps expiry checks total.
     """
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-def _record_attempt(
-    session: Session,
-    *,
-    email: str,
-    user: PanelUser | None,
-    succeeded: bool,
-    reason: str | None = None,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
-) -> None:
-    # Truncated to what the columns hold. An over-long header is either a
-    # bloated client or somebody probing, and neither deserves a 500 in place
-    # of an audit row. Every caller gets this, not just the one router that
-    # happens to trim the value on its way in.
-    session.add(
-        PanelLoginAttempt(
-            email=truncated(email, EMAIL_LIMIT),
-            panel_user_id=user.id if user is not None else None,
-            succeeded=succeeded,
-            reason=reason,
-            ip_address=truncated(ip_address, IP_ADDRESS_LIMIT),
-            user_agent=truncated(user_agent, USER_AGENT_LIMIT),
-        )
-    )
-
-
-@unavailable_on_database_failure
-def record_throttled_attempt(
-    session: Session,
-    *,
-    email: str,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
-) -> None:
-    """Record that an attempt was turned away by the per-IP throttle.
-
-    Without this, the requests refused before `login` runs leave no trace at
-    all, and `panel_login_attempts` goes quiet exactly when it matters: a real
-    flood would write at most one window's worth of rows and then nothing,
-    which reads afterwards like the attack stopped.
-
-    No account lookup, deliberately. This path exists to cost nothing, and
-    which address was typed is already the row's `email`; a caller that
-    wanted the account behind it can join on that later.
-
-    The caller is being refused, so nothing else is pending on this session
-    and committing here is safe.
-    """
-    _record_attempt(
-        session,
-        email=normalise_email(email),
-        user=None,
-        succeeded=False,
-        reason=LoginFailure.IP_THROTTLED,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-    session.commit()
 
 
 def find_by_email(session: Session, email: str) -> PanelUser | None:
@@ -228,7 +144,7 @@ def login(
     password_ok = verify_password(password, user.password_hash if user else None)
 
     if user is None:
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=None,
@@ -246,7 +162,7 @@ def login(
         # failure is the same generic one as a wrong password: a distinct
         # status here would tell an anonymous caller which addresses have an
         # account after a handful of requests.
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -270,7 +186,7 @@ def login(
             # for a wrong one. The reason recorded stays the real one either
             # way, so the audit trail still says somebody was guessing.
             _register_failure(session, user)
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -294,7 +210,7 @@ def login(
         # leave a reactivated account still locked out on its own correct
         # password. The wrong-password branch above skips the counter for a
         # deactivated account for that same reason.
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -311,7 +227,7 @@ def login(
         # who does not know the password cannot find out which accounts have
         # 2FA switched on.
         if not code:
-            _record_attempt(
+            record_attempt(
                 session,
                 email=address,
                 user=user,
@@ -327,7 +243,7 @@ def login(
             # digits are guessable in a million tries, so a second factor with
             # no limit behind it would be a weaker factor, not a second one.
             _register_failure(session, user)
-            _record_attempt(
+            record_attempt(
                 session,
                 email=address,
                 user=user,
@@ -351,7 +267,7 @@ def login(
     user.locked_until = None
     user.last_login_at = now
     session.add(panel_session)
-    _record_attempt(
+    record_attempt(
         session,
         email=address,
         user=user,

@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 
 from app.models.panel import PanelUser
 from app.schemas.panel import PanelLoginRequest, PanelUserResponse, PasswordResetConfirmRequest
-from app.services.panel_auth import LoginFailure, as_utc, normalise_email
+from app.services.panel_auth import as_utc
+from app.services.panel_columns import normalise_email
+from app.services.panel_login_audit import LoginFailure
 from tests.conftest import (
     EDITOR_PASSWORD,
     attempts_for,

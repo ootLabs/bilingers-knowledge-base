@@ -1,4 +1,4 @@
-"""How wide the panel's text columns are, and the one way to fit a value into them.
+"""How the panel's text columns are shaped: their width, and the canonical form of an address.
 
 Here rather than in `panel_auth`, which owned it first, because two services
 write rows with these columns in them: the login audit (T-82) and the change
@@ -44,3 +44,14 @@ def required(value: str, limit: int) -> str:
     that module exists to prevent.
     """
     return value[:limit]
+
+
+def normalise_email(email: str) -> str:
+    """Lowercase and strip, so one person cannot end up with two accounts.
+
+    The local part of an address is case sensitive per RFC 5321, but no mail
+    provider anyone here uses treats it that way, and two accounts differing
+    only in capitalisation would be a genuine security problem in a panel where
+    every account is known by name.
+    """
+    return email.strip().lower()

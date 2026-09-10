@@ -27,8 +27,8 @@ from app.services.panel_auth import (
     AuthenticationFailed,
     SecondFactorRequired,
     login,
-    record_throttled_attempt,
 )
+from app.services.panel_login_audit import record_throttled_attempt
 from app.services.panel_audit import record_event
 from app.services.panel_passwords import (
     InvalidPasswordResetToken,
