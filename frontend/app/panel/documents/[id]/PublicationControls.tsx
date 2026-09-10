@@ -33,7 +33,15 @@ export default function PublicationControls({
   version: VersionDetail;
   /** Whichever version parents are reading, which may not be this one. */
   live: VersionSummary | null;
-  onChanged: (version: VersionDetail) => void;
+  /**
+   * Something went live or came back. Deliberately carries nothing.
+   *
+   * Publishing changes two answers at once, which version is live and what the
+   * newest one's status is, so the parent re-reads the document rather than
+   * patching itself from one half of it. Handing back the version it acted on
+   * would be handing back the lesser half and inviting exactly that patch.
+   */
+  onChanged: () => void;
 }) {
   const t = getTranslations();
   const recover = useSessionRecovery();
@@ -42,14 +50,17 @@ export default function PublicationControls({
 
   const published = version.status === "published";
 
-  async function run(action: () => Promise<VersionDetail>) {
+  // `unknown`, because nothing here reads the result any more: re-offering it
+  // is re-offering the half-document patch `onChanged` was narrowed to prevent.
+  async function run(action: () => Promise<unknown>) {
     if (busy) {
       return;
     }
     setBusy(true);
     setFailure(null);
     try {
-      onChanged(await action());
+      await action();
+      onChanged();
     } catch (error) {
       setFailure(recover(error));
     } finally {

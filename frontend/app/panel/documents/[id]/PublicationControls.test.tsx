@@ -99,7 +99,9 @@ describe("PublicationControls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Opublikuj tę wersję" }));
 
-    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(PUBLISHED));
+    // Called, and with nothing: the parent re-reads the document, because
+    // publishing changed more than the version this component acted on.
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith());
     expect(publishVersionMock).toHaveBeenCalledWith(1, 2);
   });
 
