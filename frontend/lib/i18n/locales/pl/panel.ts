@@ -1,10 +1,12 @@
-// Panel fundacji. Odbiorcą jest redaktorka, nie administrator systemu:
-// żadnych identyfikatorów technicznych, żadnego żargonu, każdy komunikat
-// mówi co się stało i co z tym zrobić.
+// The foundation's panel. Written for an editor, not for a systems
+// administrator: no technical identifiers, no jargon, and every message says
+// what happened and what to do about it.
 //
 // Split from the parent-facing half when the dictionary passed the size
 // limit. Nothing here is ever read by a parent and nothing there by the
 // foundation, which is why this is the seam.
+import journal from "./journal";
+
 const panel = {
   nav: {
     ariaLabel: "Nawigacja panelu",
@@ -18,8 +20,8 @@ const panel = {
     title: "Sprawdzamy dostęp",
     description: "Za chwilę otworzymy panel albo poprosimy o zalogowanie.",
   },
-  // Klucze błędów w snake_case, tak jak w errors.* wyżej: przychodzą
-  // z kontraktu API (lib/panel-client.ts), nie z naszego nazewnictwa.
+  // Failure keys in snake_case, like `errors.*` in the parent half: they come
+  // from the API contract (lib/panel-client.ts), not from our naming.
   errors: {
     retry: "Spróbuj ponownie",
     invalid_credentials: {
@@ -43,6 +45,15 @@ const panel = {
     invalid_input: {
       title: "Nie możemy zapisać tego w tej postaci",
       description: "Sprawdź, czy tytuł i treść są wypełnione, a tytuł mieści się w jednej linii.",
+    },
+    // The size named in the copy is the default `DOCX_IMPORT_MAX_BYTES` (5 MB),
+    // which `import.fileHint` now states up front as well. Without this entry
+    // the import's 413 degraded to `unreachable`, so an oversized file told the
+    // editor to check an internet connection that was working perfectly.
+    file_too_large: {
+      title: "Ten plik jest za duży",
+      description:
+        "Panel wczytuje pliki .docx do 5 MB. Podziel materiał na rozdziały albo usuń z pliku obrazy i wgraj go jeszcze raz.",
     },
     too_many_attempts: {
       title: "Za dużo prób z tego miejsca",
@@ -83,9 +94,9 @@ const panel = {
     codeHint:
       "Sześciocyfrowy kod z aplikacji w telefonie. Jeśli nie masz telefonu pod ręką, wpisz jeden ze swoich kodów zapasowych.",
   },
-  // Stan dokumentu widoczny bez klikania. To główny mechanizm zaufania do
-  // panelu: redaktorka musi wiedzieć, co widzi rodzic, a co leży w szkicach.
-  // Klucze po angielsku, bo przychodzą wprost z API.
+  // The document's state, legible without clicking anything. This is the
+  // panel's main trust mechanism: an editor has to know what a parent sees and
+  // what is still a draft. The keys come straight from the API.
   status: {
     draft: "Szkic",
     in_review: "W recenzji",
@@ -108,9 +119,9 @@ const panel = {
     orderOldest: "Od najstarszych zmian",
     changedOn: "Zmieniono",
     changedBy: "przez",
-    // Stan dokumentu to nie stan najnowszej wersji. Po zapisie edycji
-    // rodzice dalej czytają starszą, opublikowaną wersję, i to musi być
-    // widoczne bez klikania.
+    // A document's state is not its newest version's. After a save, parents
+    // go on reading the older published version, and that has to be visible
+    // without opening anything.
     parentsRead: "Rodzice czytają wersję {version}.",
     draftWaiting: "Nowsze zmiany czekają w szkicu (wersja {version}).",
     parentsReadTitle: "Pod tytułem: {title}.",
@@ -129,9 +140,9 @@ const panel = {
       description: "Zmień szukane słowa albo pokaż dokumenty we wszystkich stanach.",
     },
   },
-  // Nawiasy klamrowe to miejsca na liczby i daty, podstawia je fill()
-  // z lib/i18n. Całe zdanie zostaje tutaj, bo polski się odmienia i sklejanie
-  // go z kawałków w komponencie kończy się błędem gramatycznym.
+  // The braces are placeholders for numbers and dates, filled by `fill()` in
+  // lib/i18n. The whole sentence stays here because Polish inflects, and
+  // gluing one together from fragments in a component gets the grammar wrong.
   editor: {
     heading: "Edycja dokumentu",
     createHeading: "Nowy dokument",
@@ -187,7 +198,7 @@ const panel = {
     heading: "Wgraj plik .docx",
     lead: "Pokażemy, co system odczytał z pliku, zanim cokolwiek zapiszemy. Jeśli coś się nie zgadza, po prostu odrzuć wynik.",
     fileLabel: "Plik z materiałem",
-    fileHint: "Tylko pliki .docx z Worda. Tabele i obrazy nie są wczytywane.",
+    fileHint: "Tylko pliki .docx z Worda, do 5 MB. Tabele i obrazy nie są wczytywane.",
     read: "Odczytaj plik",
     reading: "Czytamy plik...",
     previewHeading: "Co odczytaliśmy",
@@ -221,44 +232,11 @@ const panel = {
     withdraw: "Wycofaj z publikacji",
     working: "Chwileczkę...",
   },
-  audit: {
-    heading: "Dziennik zmian",
-    lead: "Kto i kiedy pracował przy bazie wiedzy. Dziennik jest tylko do odczytu, nikt nie może w nim niczego poprawić ani usunąć.",
-    actorLabel: "Adres e-mail osoby",
-    sinceLabel: "Od dnia",
-    untilLabel: "Do dnia",
-    apply: "Pokaż",
-    applying: "Wczytujemy...",
-    // Klucze zdarzeń przychodzą z API (app/models/audit.py), stąd snake_case.
-    actions: {
-      login_succeeded: "Zalogowanie do panelu",
-      login_failed: "Nieudana próba zalogowania",
-      logged_out: "Wylogowanie z panelu",
-      document_created: "Utworzenie dokumentu",
-      document_version_saved: "Zapisanie nowej wersji",
-      document_version_restored: "Przywrócenie starszej wersji",
-      document_imported: "Wczytanie pliku .docx",
-      document_published: "Opublikowanie wersji",
-      document_withdrawn: "Wycofanie wersji z publikacji",
-      account_created: "Utworzenie konta w panelu",
-      account_changed: "Zmiana uprawnień konta",
-      password_reset_issued: "Wydanie kodu do ustawienia hasła",
-      two_factor_enabled: "Włączenie dodatkowego zabezpieczenia",
-      two_factor_disabled: "Wyłączenie dodatkowego zabezpieczenia",
-      two_factor_reset: "Skasowanie dodatkowego zabezpieczenia przez administratora",
-    },
-    loading: {
-      title: "Wczytujemy dziennik",
-      description: "To potrwa moment.",
-    },
-    empty: {
-      title: "Brak zdarzeń w tym zakresie",
-      description: "Zmień zakres dat albo wyczyść adres e-mail, żeby zobaczyć więcej.",
-    },
-  },
-  // Logowanie dwuskładnikowe. Odbiorcą jest osoba, która pierwszy raz słyszy
-  // to określenie, więc nigdzie nie pada słowo "TOTP" ani "sekret": jest
-  // aplikacja, jest klucz, są kody zapasowe na papierze.
+  // The journal's vocabulary is its own slice; see journal.ts.
+  audit: journal,
+  // The second factor, written for somebody hearing the term for the first
+  // time: the words "TOTP" and "secret" appear nowhere. There is an app, there
+  // is a key, and there are backup codes on paper.
   twoFactor: {
     heading: "Dodatkowe zabezpieczenie logowania",
     lead: "Poza hasłem panel może prosić o sześciocyfrowy kod z aplikacji w telefonie. Dzięki temu samo poznanie hasła nie wystarczy, żeby wejść do bazy wiedzy fundacji.",

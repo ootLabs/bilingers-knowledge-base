@@ -62,6 +62,39 @@ export default function AuditLog() {
     return () => inFlight.current?.abort();
   }, [load]);
 
+  /**
+   * The detail column in Polish.
+   *
+   * Two shapes arrive here, both keys rather than sentences. A bare word is a
+   * login reason from `panel_login_attempts.reason`, a closed set. Anything
+   * with an `=` in it is space separated `key=value` pairs written by a router
+   * (`version=3`, `bytes=4096 headings=2`). Numbers pass through untouched,
+   * being language neutral; a key or value nobody has translated prints as it
+   * came, on the same reasoning as an unknown action below.
+   */
+  function describeDetail(detail: string): string {
+    if (!detail.includes("=")) {
+      const reason = t(`panel.audit.reasons.${detail}`);
+      return reason === `panel.audit.reasons.${detail}` ? detail : reason;
+    }
+    return detail
+      .split(" ")
+      .map((pair) => {
+        const [key, ...rest] = pair.split("=");
+        const value = rest.join("=");
+        if (value === "") {
+          return pair;
+        }
+        const label = t(`panel.audit.details.${key}`);
+        const spelled = t(`panel.audit.values.${value}`);
+        return [
+          label === `panel.audit.details.${key}` ? key : label,
+          spelled === `panel.audit.values.${value}` ? value : spelled,
+        ].join(": ");
+      })
+      .join(", ");
+  }
+
   function describe(entry: AuditEntry): string {
     // An unknown action prints its own key rather than nothing: a blank line in
     // a journal is worse than a technical word in one, because it hides that
@@ -165,7 +198,7 @@ export default function AuditLog() {
                 <p className="audit-row__what">{describe(entry)}</p>
                 <p className="audit-row__meta">
                   {formatDateTime(entry.occurredAt)}, {entry.actorEmail}
-                  {entry.detail !== null && `, ${entry.detail}`}
+                  {entry.detail !== null && `, ${describeDetail(entry.detail)}`}
                 </p>
               </li>
             ))}

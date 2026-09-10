@@ -336,8 +336,15 @@ class TestLoggingInWithIt:
         response = sign_in(panel_client, panel_editor.email, EDITOR_PASSWORD, "000000")
 
         assert response.status_code == 401
-        assert response.json()["detail"] == "invalid_credentials"
+        # Its own answer, not "your address or password is wrong": this is only
+        # reachable after a correct password, by somebody the previous attempt
+        # already told that the account has a second factor. Saying so reveals
+        # nothing and stops sending her to an administrator over a typo.
+        assert response.json()["detail"] == "invalid_code"
+        assert response.headers["X-Second-Factor"] == "invalid"
         panel_db.refresh(panel_editor)
+        # And it still costs an attempt, which is what keeps six digits from
+        # being guessable.
         assert panel_editor.failed_login_count == 1
 
     def test_a_printed_code_works_once(
@@ -372,7 +379,7 @@ class TestLoggingInWithIt:
         response = sign_in(panel_client, other.email, EDITOR_PASSWORD, codes[0])
 
         assert response.status_code == 401
-        assert response.json()["detail"] == "invalid_credentials"
+        assert response.json()["detail"] == "invalid_code"
 
 
 class TestTurningItOffAndRecovering:

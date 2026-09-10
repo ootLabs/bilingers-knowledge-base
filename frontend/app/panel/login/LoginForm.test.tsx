@@ -123,6 +123,19 @@ describe("LoginForm", () => {
     );
   });
 
+  it("says the code was wrong rather than blaming the password", async () => {
+    // A mistyped code used to read "Adres e-mail lub hasło się nie zgadzają",
+    // which sends somebody whose password was right to an administrator.
+    panelLoginMock.mockRejectedValueOnce(new PanelRequestError("invalid_code"));
+    render(<LoginForm />);
+    fillIn();
+
+    expect(await screen.findByText("Ten kod się nie zgadza")).toBeInTheDocument();
+    // And the field is on screen even though this was the first attempt, so
+    // there is somewhere to correct it.
+    expect(screen.getByLabelText("Kod z aplikacji")).toBeInTheDocument();
+  });
+
   it("keeps the code field on screen after a mistyped code", async () => {
     // Hiding it again would make the person start the whole login over.
     panelLoginMock.mockRejectedValueOnce(new PanelRequestError("second_factor_required"));

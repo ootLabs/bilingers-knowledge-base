@@ -25,6 +25,7 @@ from app.schemas.panel import (
 )
 from app.services.panel_auth import (
     AuthenticationFailed,
+    SecondFactorRejected,
     SecondFactorRequired,
     login,
 )
@@ -155,6 +156,16 @@ def open_session(
             status_code=401,
             detail="second_factor_required",
             headers={"WWW-Authenticate": "Bearer", "X-Second-Factor": "required"},
+        ) from error
+    except SecondFactorRejected as error:
+        # Before the base class it inherits from, or it would never be reached.
+        # Same header as the prompt above, with a different value: the form has
+        # to keep the code field on screen and say the code was wrong, not send
+        # her after a password that was right.
+        raise HTTPException(
+            status_code=401,
+            detail="invalid_code",
+            headers={"WWW-Authenticate": "Bearer", "X-Second-Factor": "invalid"},
         ) from error
     except AuthenticationFailed as error:
         raise HTTPException(status_code=401, detail="invalid_credentials") from error

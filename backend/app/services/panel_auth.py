@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
+from app.models.panel import PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
 from app.services.panel_columns import (
     IP_ADDRESS_LIMIT,
@@ -34,16 +34,29 @@ from app.services.panel_columns import (
     truncated,
 )
 from app.services.panel_errors import unavailable_on_database_failure
-from app.services.panel_login_audit import (
-    LoginFailure,
-    record_attempt,
-    record_throttled_attempt,
-)
+from app.services.panel_login_audit import LoginFailure, record_attempt
 from app.services.panel_two_factor import has_second_factor, verify_second_factor
 
 
 class AuthenticationFailed(Exception):
     """The credentials do not identify an account that may log in."""
+
+
+class SecondFactorRejected(AuthenticationFailed):
+    """The password was right; the code that came with it was not (T-83).
+
+    A subclass, so anything that only knows `AuthenticationFailed` keeps
+    treating it as one refusal among many. The login endpoint tells it apart
+    for one reason: the alternative is telling somebody who mistyped six digits
+    that her address or password is wrong, which sends her to an administrator
+    for a password reset she does not need.
+
+    Telling it apart reveals nothing. This is reachable only after a correct
+    password, by a caller who already knows the account has a second factor
+    because the previous attempt said `second_factor_required` outright. The
+    lockout still charges the attempt, so the six digits are no easier to guess
+    than before.
+    """
 
 
 class SecondFactorRequired(Exception):
@@ -253,7 +266,7 @@ def login(
                 user_agent=user_agent,
             )
             session.commit()
-            raise AuthenticationFailed("wrong second factor")
+            raise SecondFactorRejected("wrong second factor")
 
     token = new_token()
     panel_session = PanelSession(

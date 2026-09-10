@@ -79,7 +79,7 @@ def publish(
             action=AuditAction.DOCUMENT_PUBLISHED,
             subject_type="document",
             subject_id=document_id,
-            detail=f"version {version_number}",
+            detail=f"version={version_number}",
         )
     return published.version
 
@@ -112,6 +112,6 @@ def withdraw(
         action=AuditAction.DOCUMENT_WITHDRAWN,
         subject_type="document",
         subject_id=document_id,
-        detail=f"version {version_number}",
+        detail=f"version={version_number}",
     )
     return withdrawn

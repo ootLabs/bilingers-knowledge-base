@@ -82,6 +82,6 @@ async def preview_import(
         session,
         actor=editor,
         action=AuditAction.DOCUMENT_IMPORTED,
-        detail=f"{len(data)} bytes, {imported.heading_count} headings",
+        detail=f"bytes={len(data)} headings={imported.heading_count}",
     )
     return imported

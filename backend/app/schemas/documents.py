@@ -29,7 +29,7 @@ _CONTROL_IN_TEXT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # is worth accepting.
 _CONTROL_IN_LINE = re.compile(r"[\x00-\x1f\x7f]")
 
-# `documents.title` is VARCHAR(500). Matching the column exactly means an
+# `document_versions.title` is VARCHAR(500). Matching the column exactly means an
 # over-long title is refused as a 422 rather than truncated silently or
 # rejected by the driver as a 500.
 TITLE_MAX_LENGTH = 500

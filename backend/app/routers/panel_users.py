@@ -130,7 +130,7 @@ def update_user(
         action=AuditAction.ACCOUNT_CHANGED,
         subject_type="panel_user",
         subject_id=changed.id,
-        detail=f"role={changed.role.value} active={changed.is_active}",
+        detail=f"role={changed.role.value} active={str(changed.is_active).lower()}",
     )
     return changed
 

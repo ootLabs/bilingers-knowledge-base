@@ -11,7 +11,7 @@ one would destroy the trail that makes a bad answer explainable. The verbs
 missing here are the card.
 
 `detail` is a key, never a sentence. The Polish copy that answers each of them
-lives in `frontend/lib/i18n/locales/pl.ts`.
+lives in `frontend/lib/i18n/locales/pl/panel.ts`.
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ def save_edit(
             action=AuditAction.DOCUMENT_VERSION_SAVED,
             subject_type="document",
             subject_id=document_id,
-            detail=f"version {version.version_number}",
+            detail=f"version={version.version_number}",
         )
         return version
     except DocumentNotFound as error:
@@ -240,7 +240,7 @@ def restore(
             action=AuditAction.DOCUMENT_VERSION_RESTORED,
             subject_type="document",
             subject_id=document_id,
-            detail=f"version {version_number} to {restored.version_number}",
+            detail=f"version={version_number} to={restored.version_number}",
         )
         return restored
     except DocumentNotFound as error:

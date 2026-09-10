@@ -51,7 +51,8 @@ Next.js 15, App Router, TypeScript. All user-facing copy is **Polish**; identifi
 | `frontend/lib/i18n/config.ts` | `SUPPORTED_LOCALES`, `DEFAULT_LOCALE`, the `Locale` type |
 | `frontend/lib/i18n/locales/pl/index.ts` | The Polish dictionary in one object, assembled from its two halves. `translations.ts` types its registry against this, so a second locale still has to match the whole shape; both halves are `as const`, so every string stays a literal type |
 | `frontend/lib/i18n/locales/pl/parent.ts` | Everything a parent sees: landing, chat, the shared `errors.*` failure keys and the routes still holding placeholder copy. Those keys and `chat.placeholder_answer.*` are snake_case because they are the API contract, not our naming: renaming one silently drops copy |
-| `frontend/lib/i18n/locales/pl/panel.ts` | Everything the foundation sees: login, documents, editor, history, import, publication, the journal and the second factor. Split from the parent-facing half at the size limit, along the seam the product already has: two audiences who never read each other's screens |
+| `frontend/lib/i18n/locales/pl/journal.ts` | The change journal's vocabulary: an action name for every event the backend records, a reason for every way a login is refused, and the keys the `key=value` detail column arrives as. Nested back into `panel.ts` as `audit`, so the shape the registry types against is unchanged |
+| `frontend/lib/i18n/locales/pl/panel.ts` | Everything the foundation sees: login, documents, editor, history, import, publication, the journal and the second factor. Split from the parent-facing half at the size limit, along the seam the product already has: two audiences who never read each other's screens. The journal's own vocabulary is `journal.ts` |
 | `frontend/lib/i18n/translations.ts` | `getDictionary(locale)`, the one place a new locale gets registered |
 | `frontend/lib/i18n/index.ts` | `getTranslations(locale)`, the `t(key)` lookup components call, and `fill(template, values)` for the `{name}` placeholders that keep a sentence carrying a number whole in the dictionary instead of glued together in a component |
 | `frontend/next.config.mjs` | Next.js config - `reactStrictMode` only |
@@ -108,6 +109,6 @@ Next.js 15, App Router, TypeScript. All user-facing copy is **Polish**; identifi
 | A shared component | `frontend/components/<Name>.tsx` | Only once it is reused twice; create the folder with the first file |
 | An API call | `frontend/lib/api-client.ts` | One client, not `fetch` scattered across components |
 | User-facing text | `frontend/lib/i18n/locales/pl/` (`parent.ts` or `panel.ts`), read it with `getTranslations()` | Never hardcode strings in a component, see `../llm/i18n.md` |
-| A second locale | `frontend/lib/i18n/locales/<code>.ts`, same keys as `pl.ts` | Register it in the `dictionaries` map in `frontend/lib/i18n/translations.ts`, nothing else changes |
+| A second locale | `frontend/lib/i18n/locales/<code>/`, same keys as `locales/pl/` | Register it in the `dictionaries` map in `frontend/lib/i18n/translations.ts`, nothing else changes |
 
 No component library, state manager, or styling framework is installed. Adding one is a decision worth recording in `../architecture.md`, not a drive-by `npm install`.

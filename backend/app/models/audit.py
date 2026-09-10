@@ -91,8 +91,15 @@ class PanelAuditEvent(Base):
     subject_type: Mapped[str | None] = mapped_column(String(32))
     subject_id: Mapped[int | None] = mapped_column(Integer)
 
-    # Room for one short fact, such as which version number was saved. Never a
-    # copy of the content: this table has to be readable and keepable, and a
+    # Room for one short fact, such as which version number was saved, written
+    # as space separated `key=value` pairs (`version=3`, `bytes=4096
+    # headings=2`). Keys, not sentences, the same rule the rest of the API
+    # follows: the Polish that renders them lives in the frontend dictionary,
+    # and English prose here would reach a Polish-only editor untranslated.
+    # The login audit's own `reason` values come through this field too, as a
+    # bare key with no `=`.
+    #
+    # Never a copy of the content: this table has to be readable and keepable, and a
     # journal that grows with the size of the documents is neither. It is also
     # not where a parent's question ever goes; conversation retention hangs on
     # GDPR (B-07, T-113).

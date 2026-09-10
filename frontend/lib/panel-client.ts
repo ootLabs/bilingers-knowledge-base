@@ -19,6 +19,7 @@ export type PanelFailure =
   | "not_found"
   | "conflict"
   | "invalid_input"
+  | "file_too_large"
   | "too_many_attempts"
   | "database_unavailable"
   | "unreachable";
@@ -38,6 +39,13 @@ const FAILURE_BY_STATUS: Record<number, PanelFailure> = {
   403: "forbidden",
   404: "not_found",
   409: "conflict",
+  // The .docx import is the one endpoint that can answer this (see
+  // `app.routers.panel_document_imports`), and it needs its own key rather
+  // than `invalid_input`: an oversized file is nothing to do with the title or
+  // the body, and without the mapping a 413 degraded to `unreachable`, which
+  // told an editor to check her internet connection over a file that arrived
+  // perfectly well.
+  413: "file_too_large",
   422: "invalid_input",
   429: "too_many_attempts",
   503: "database_unavailable",
@@ -194,10 +202,19 @@ export async function panelLogin({
       // not carry it is "these credentials do not open a session", not "your
       // session expired" - there is no session yet, and treating it as an
       // expiry would bounce the editor to the screen she is already on.
+      // Three answers behind one status, told apart by the header the backend
+      // sets (`app.routers.panel_auth`), because a failed response's body is
+      // never read. `invalid` is only ever sent after a correct password, to
+      // somebody the previous attempt already told that this account has a
+      // second factor, so it reveals nothing and it stops the form telling her
+      // that a password which was right is wrong.
+      const prompt = response.headers.get("X-Second-Factor");
       throw new PanelRequestError(
-        response.headers.get("X-Second-Factor") === "required"
+        prompt === "required"
           ? "second_factor_required"
-          : "invalid_credentials",
+          : prompt === "invalid"
+            ? "invalid_code"
+            : "invalid_credentials",
       );
     }
     throw failureFor(response);

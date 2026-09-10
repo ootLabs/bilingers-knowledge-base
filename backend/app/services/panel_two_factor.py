@@ -33,7 +33,6 @@ from app.models.two_factor import PanelBackupCode, PanelTotpSecret
 from app.security import hash_token
 from app.services.panel_errors import unavailable_on_database_failure
 from app.services.panel_totp import (
-    TOTP_INTERVAL,
     decrypt_secret,
     encrypt_secret,
     matched_step,
@@ -42,6 +41,7 @@ from app.services.panel_totp import (
     normalise_code,
     provisioning_uri,
 )
+
 
 class TwoFactorAlreadyOn(Exception):
     """This account already has a confirmed second factor."""

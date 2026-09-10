@@ -82,9 +82,26 @@ describe("panelLogin", () => {
     expect(readPanelToken()).toBeNull();
   });
 
+  it("calls a mistyped second factor a wrong code, not a wrong password", async () => {
+    // The same 401 as every other refusal, told apart by the header. Without
+    // it the form tells somebody who fumbled six digits that her address or
+    // password is wrong and to ask an administrator for a reset.
+    vi.stubGlobal("fetch", vi.fn(async () => failing(401, { "X-Second-Factor": "invalid" })));
+
+    await expect(
+      panelLogin({ email: "a@b.test", password: "haslo", code: "000000" }),
+    ).rejects.toMatchObject({ failure: "invalid_code" });
+    expect(readPanelToken()).toBeNull();
+  });
+
   it.each([
     [403, "forbidden"],
     [409, "conflict"],
+    // Its own key, not `invalid_input` and certainly not `unreachable`: the
+    // .docx import answers 413 for an oversized file, and telling the editor
+    // to check her internet connection sends her after a fault that is not
+    // there.
+    [413, "file_too_large"],
     [422, "invalid_input"],
     [429, "too_many_attempts"],
     [503, "database_unavailable"],

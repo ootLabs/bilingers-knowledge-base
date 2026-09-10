@@ -50,7 +50,10 @@ export default function LoginForm() {
       router.replace(AFTER_LOGIN);
     } catch (error) {
       const failure = toPanelFailure(error);
-      if (failure === "second_factor_required") {
+      // `invalid_code` too, not only the prompt: somebody whose browser filled
+      // the code in on the first attempt would otherwise be told the code was
+      // wrong with no field on screen to correct it.
+      if (failure === "second_factor_required" || failure === "invalid_code") {
         setNeedsCode(true);
       }
       setState({ phase: "failed", failure });

@@ -79,6 +79,34 @@ describe("AuditLog", () => {
     );
   });
 
+  it("spells out the detail column in Polish", async () => {
+    // A journal that answers "bad_password" and "version=3" is a journal full
+    // of the technical identifiers this screen is ruled to have none of.
+    listAuditEventsMock.mockResolvedValueOnce([
+      { ...entry("login_failed"), detail: "bad_password" },
+      { ...entry("document_version_saved"), detail: "version=3" },
+      { ...entry("document_imported"), detail: "bytes=4096 headings=2" },
+      { ...entry("account_changed"), detail: "role=editor active=false" },
+    ]);
+    render(<AuditLog />);
+
+    expect(await screen.findByText(/błędne hasło/)).toBeInTheDocument();
+    expect(screen.getByText(/wersja: 3/)).toBeInTheDocument();
+    expect(screen.getByText(/bajtów: 4096, nagłówków: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/rola: redaktorka, konto czynne: nie/)).toBeInTheDocument();
+  });
+
+  it("prints a detail nobody has translated rather than nothing", async () => {
+    // Same reasoning as an unknown action: a blank where something happened
+    // hides that it happened at all.
+    listAuditEventsMock.mockResolvedValueOnce([
+      { ...entry("document_created"), detail: "czegos_takiego_nie_znamy" },
+    ]);
+    render(<AuditLog />);
+
+    expect(await screen.findByText(/czegos_takiego_nie_znamy/)).toBeInTheDocument();
+  });
+
   it("does not let a second read start while one is running", async () => {
     // The race closed at its source. Two clicks on "Pokaż" one gesture apart
     // used to leave two reads in flight, with the older one able to answer

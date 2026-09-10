@@ -81,7 +81,10 @@ class TestWhatGetsRecorded:
             for entry in journal(panel_client, token)
             if entry["action"] == AuditAction.DOCUMENT_VERSION_SAVED
         ]
-        assert saved[0]["detail"] == "version 2"
+        # `key=value`, not English prose: the Polish that renders it lives in
+        # the frontend dictionary, and a sentence here would reach a
+        # Polish-only editor untranslated.
+        assert saved[0]["detail"] == "version=2"
         assert saved[0]["subject_id"] == document_id
 
     def test_logging_out_is_recorded_because_nothing_else_records_it(
