@@ -18,7 +18,7 @@ both halves raise and build them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -129,15 +129,11 @@ def summary_of(
 def detail_of(
     version: DocumentVersion, author_email: str | None, publisher_email: str | None = None
 ) -> VersionDetail:
+    """The same fields plus the content, built from `summary_of` rather than
+    listing all eight again: two copies of one field list is one place for the
+    next field to be added and the other to be forgotten."""
     return VersionDetail(
-        version_number=version.version_number,
-        status=version.status,
-        title=version.title,
-        change_comment=version.change_comment,
-        author_email=author_email,
-        created_at=version.created_at,
-        published_at=version.published_at,
-        published_by_email=publisher_email,
+        **asdict(summary_of(version, author_email, publisher_email)),
         content=version.content,
     )
 

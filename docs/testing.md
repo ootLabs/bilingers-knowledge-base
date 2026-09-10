@@ -6,7 +6,7 @@ Tests exist here for two audiences. A human needs to know a change is safe. An a
 
 ```bash
 docker compose exec backend pytest                  # backend, with coverage gate
-docker compose exec frontend npm test               # frontend unit tests
+docker compose exec frontend npm test               # frontend, with coverage gate
 docker compose exec frontend npm run typecheck      # TypeScript, no emit
 python scripts/smoke_test.py                        # the running stack, end to end
 python scripts/check_map.py                         # docs/map matches reality
