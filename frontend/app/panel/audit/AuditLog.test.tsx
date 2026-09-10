@@ -68,12 +68,64 @@ describe("AuditLog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pokaż" }));
 
     await waitFor(() =>
-      expect(listAuditEventsMock).toHaveBeenLastCalledWith({
-        actorEmail: "justyna@fundacja.test",
-        since: "2026-09-01",
-        until: "2026-09-05",
+      expect(listAuditEventsMock).toHaveBeenLastCalledWith(
+        {
+          actorEmail: "justyna@fundacja.test",
+          since: "2026-09-01",
+          until: "2026-09-05",
+        },
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it("does not let a second read start while one is running", async () => {
+    // The race closed at its source. Two clicks on "Pokaż" one gesture apart
+    // used to leave two reads in flight, with the older one able to answer
+    // second and show entries that did not match the filters above them.
+    let releaseFirst: (entries: AuditEntry[]) => void = () => {};
+    listAuditEventsMock.mockReturnValueOnce(
+      new Promise<AuditEntry[]>((resolve) => {
+        releaseFirst = resolve;
       }),
     );
+    render(<AuditLog />);
+    await waitFor(() => expect(listAuditEventsMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByRole("button", { name: "Wczytujemy..." })).toBeDisabled();
+
+    releaseFirst([entry("document_published", "justyna@fundacja.test")]);
+
+    const apply = await screen.findByRole("button", { name: "Pokaż" });
+    expect(apply).toBeEnabled();
+    expect(listAuditEventsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the read when the screen goes away", async () => {
+    // What disabling cannot cover: a request answering into a screen nobody is
+    // looking at any more.
+    listAuditEventsMock.mockReturnValueOnce(new Promise<AuditEntry[]>(() => {}));
+    const { unmount } = render(<AuditLog />);
+    await waitFor(() => expect(listAuditEventsMock).toHaveBeenCalledTimes(1));
+
+    expect(listAuditEventsMock.mock.calls[0][1]?.aborted).toBe(false);
+
+    unmount();
+
+    expect(listAuditEventsMock.mock.calls[0][1]?.aborted).toBe(true);
+  });
+
+  it("says nothing when a read was superseded rather than failed", async () => {
+    // An abort is this screen cancelling itself. Reported as a failure it would
+    // read "check your internet connection" on a screen whose network is fine.
+    const aborted = new Error("aborted");
+    aborted.name = "AbortError";
+    listAuditEventsMock.mockRejectedValue(aborted);
+    render(<AuditLog />);
+
+    await waitFor(() => expect(listAuditEventsMock).toHaveBeenCalled());
+    expect(screen.queryByText("Nie udało się połączyć")).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("offers no way to change a line", async () => {

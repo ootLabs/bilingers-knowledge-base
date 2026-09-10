@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import StatusMessage from "@/components/StatusMessage";
 import { formatDateTime } from "@/lib/format-date";
@@ -28,12 +28,26 @@ export default function AuditLog() {
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
 
+  // The read still in the air, if any, so leaving the screen does not leave a
+  // request answering into nothing.
+  //
+  // Two clicks on "Pokaż" used to be one gesture apart, and the older answer
+  // could land second with entries that did not match the filters above them.
+  // That is closed at the source now: the button is disabled while a read runs,
+  // the way publish and save are. This covers what disabling cannot.
+  const inFlight = useRef<AbortController | null>(null);
+
   const load = useCallback(
     async (filters: { actorEmail: string; since: string; until: string }) => {
+      inFlight.current?.abort();
+      const request = new AbortController();
+      inFlight.current = request;
       setState({ phase: "loading" });
       try {
-        setState({ phase: "ready", entries: await listAuditEvents(filters) });
+        setState({ phase: "ready", entries: await listAuditEvents(filters, request.signal) });
       } catch (error) {
+        // An abort comes back as null: it is this screen cancelling itself, so
+        // there is nothing to render and the newer read owns the state.
         const failure = recover(error);
         if (failure !== null) {
           setState({ phase: "failed", failure });
@@ -45,6 +59,7 @@ export default function AuditLog() {
 
   useEffect(() => {
     void load({ actorEmail: "", since: "", until: "" });
+    return () => inFlight.current?.abort();
   }, [load]);
 
   function describe(entry: AuditEntry): string {
@@ -101,8 +116,16 @@ export default function AuditLog() {
           />
         </div>
         <div className="panel-field">
-          <button type="submit" className="cta-button">
-            {t("panel.audit.apply")}
+          {/* Not clickable while a read is running, which is how the rest of
+              the panel handles this (publish and save both disable). The abort
+              above then covers what disabling cannot: leaving the screen, and
+              a genuine change of filters. */}
+          <button
+            type="submit"
+            className="cta-button"
+            disabled={state.phase === "loading"}
+          >
+            {state.phase === "loading" ? t("panel.audit.applying") : t("panel.audit.apply")}
           </button>
         </div>
       </form>
