@@ -21,12 +21,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.panel import PanelPasswordReset, PanelUser
 from app.security import hash_password, hash_token, new_token, verify_password
-from app.services.panel_auth import (
-    AuthenticationFailed,
-    as_utc,
-    revoke_all_sessions,
-    utcnow,
-)
+from app.services.panel_auth import AuthenticationFailed, as_utc, utcnow
+from app.services.panel_sessions import revoke_all_sessions
 from app.services.panel_errors import unavailable_on_database_failure
 
 

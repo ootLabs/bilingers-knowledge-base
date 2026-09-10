@@ -57,6 +57,13 @@ class PanelLoginRequest(BaseModel):
     # login form, where rejecting a short one only tells an attacker that the
     # real password is longer than what they tried.
     password: str = Field(min_length=1, max_length=1024)
+    # The second factor (T-83), in the same request as the password rather than
+    # behind a challenge token of its own. That is what makes every attempt at
+    # it a full login attempt, and therefore automatically subject to the per-IP
+    # throttle and the per-account lockout that already guard this endpoint. A
+    # separate challenge endpoint would have needed both limits reimplemented.
+    # Wide enough for a six-digit code or a printed backup code with its dashes.
+    code: str | None = Field(default=None, max_length=32)
 
 
 class PanelUserResponse(BaseModel):

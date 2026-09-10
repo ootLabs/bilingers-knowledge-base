@@ -5,6 +5,7 @@ Importing this package registers every table on `Base.metadata`. Alembic's
 module belongs in the imports below or it is invisible to migrations.
 """
 
+from app.models.audit import AuditAction, PanelAuditEvent
 from app.models.base import PERSONAL_DATA, Base, TimestampMixin, personal_data_columns
 from app.models.chat import ChatSession, Query
 from app.models.document import Document, DocumentStatus, DocumentVersion
@@ -16,10 +17,12 @@ from app.models.panel import (
     PanelSession,
     PanelUser,
 )
+from app.models.two_factor import PanelBackupCode, PanelTotpSecret
 from app.models.user import User
 
 __all__ = [
     "PERSONAL_DATA",
+    "AuditAction",
     "Base",
     "ChatSession",
     "Document",
@@ -28,10 +31,13 @@ __all__ = [
     "KnowledgeBaseVersion",
     "KnowledgeGap",
     "KnowledgeGapStatus",
+    "PanelAuditEvent",
+    "PanelBackupCode",
     "PanelLoginAttempt",
     "PanelPasswordReset",
     "PanelRole",
     "PanelSession",
+    "PanelTotpSecret",
     "PanelUser",
     "Query",
     "TimestampMixin",

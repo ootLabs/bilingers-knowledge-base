@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_session
 from app.dependencies import current_panel_session
+from app.models.audit import AuditAction
 from app.models.panel import PanelSession, PanelUser
 from app.schemas.panel import (
     PanelLoginRequest,
@@ -24,15 +25,18 @@ from app.schemas.panel import (
 )
 from app.services.panel_auth import (
     AuthenticationFailed,
+    SecondFactorRejected,
+    SecondFactorRequired,
     login,
-    record_throttled_attempt,
-    revoke_session,
 )
+from app.services.panel_login_audit import record_throttled_attempt
+from app.services.panel_audit import record_event
 from app.services.panel_passwords import (
     InvalidPasswordResetToken,
     change_password,
     set_password_with_token,
 )
+from app.services.panel_sessions import revoke_session
 from app.services.rate_limit import TooManyAttempts
 from app.services.rate_limit import check as check_ip_rate_limit
 
@@ -94,6 +98,14 @@ def open_session(
     addresses; the IP throttle is what stops that cost being spent on a flood.
     A throttled attempt still leaves one audit row per address per window, so
     a flood is visible in `panel_login_attempts` rather than silent.
+
+    `TwoFactorNotConfigured` is deliberately not caught here. An enrolled
+    account logging in after the TOTP key was rotated away reaches it, and the
+    app-level handler in `app.main` answers 503 with the
+    `X-Second-Factor: not-configured` header the frontend reads to tell it
+    apart from a database outage. Translating it locally is how this endpoint
+    ended up answering a bare 503, which reads on screen as "try again in a
+    moment" for something that will never fix itself.
     """
     ip = _client_ip(request)
     if ip is not None:
@@ -126,9 +138,35 @@ def open_session(
             session,
             email=payload.email,
             password=payload.password,
+            code=payload.code,
             ip_address=ip,
             user_agent=request.headers.get("user-agent") or None,
         )
+    except SecondFactorRequired as error:
+        # The one refusal with its own key. It is only reachable by somebody who
+        # already typed the correct password, so it gives away nothing they did
+        # not know, and without it the form cannot know to ask for a code.
+        #
+        # Also signalled in a header, because the frontend never reads a failed
+        # response's body (see `lib/panel-client.ts`) and that rule is worth
+        # more than the convenience of putting it only in `detail`. The header
+        # is listed in `expose_headers` in `app.main`, or the browser hides it
+        # from the script that needs it.
+        raise HTTPException(
+            status_code=401,
+            detail="second_factor_required",
+            headers={"WWW-Authenticate": "Bearer", "X-Second-Factor": "required"},
+        ) from error
+    except SecondFactorRejected as error:
+        # Before the base class it inherits from, or it would never be reached.
+        # Same header as the prompt above, with a different value: the form has
+        # to keep the code field on screen and say the code was wrong, not send
+        # her after a password that was right.
+        raise HTTPException(
+            status_code=401,
+            detail="invalid_code",
+            headers={"WWW-Authenticate": "Bearer", "X-Second-Factor": "invalid"},
+        ) from error
     except AuthenticationFailed as error:
         raise HTTPException(status_code=401, detail="invalid_credentials") from error
 
@@ -146,6 +184,9 @@ def close_session(
 ) -> Response:
     """Log out. Revokes this session only, not the account's other ones."""
     revoke_session(session, resolved[1])
+    # Logging in is already in `panel_login_attempts`; logging out is not
+    # recorded anywhere else, so this is the journal's half of the pair (T-89).
+    record_event(session, actor=resolved[0], action=AuditAction.LOGGED_OUT)
     return Response(status_code=204)
 
 

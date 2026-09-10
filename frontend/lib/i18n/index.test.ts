@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getTranslations } from "./index";
+import { fill, getTranslations } from "./index";
 
 describe("getTranslations", () => {
   it("resolves a top-level dot-path key", () => {
@@ -44,5 +44,27 @@ describe("getTranslations, missing key", () => {
 
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("fill", () => {
+  it("puts a value into a sentence instead of gluing the sentence together", () => {
+    // Polish inflects, so a fragment that reads correctly in one sentence is
+    // wrong in the next. The whole sentence stays in the dictionary.
+    expect(fill("Zapisano jako wersja {version}.", { version: 4 })).toBe(
+      "Zapisano jako wersja 4.",
+    );
+  });
+
+  it("fills every placeholder in one string", () => {
+    expect(fill("Wersja {version} z dnia {date}", { version: 2, date: "5 wrzesnia" })).toBe(
+      "Wersja 2 z dnia 5 wrzesnia",
+    );
+  });
+
+  it("leaves a placeholder nobody supplied visible rather than dropping it", () => {
+    // A visible "{version}" gets reported and fixed; a silently dropped one
+    // leaves a sentence that looks finished and says the wrong thing.
+    expect(fill("Wersja {version}", {})).toBe("Wersja {version}");
   });
 });

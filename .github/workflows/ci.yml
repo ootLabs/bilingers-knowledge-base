@@ -107,7 +107,9 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests with coverage
-        run: npx vitest run --coverage
+        # The same script the definition of done names, so passing locally and
+        # passing here cannot mean two different things.
+        run: npm test
 
       - name: Production build
         run: npm run build

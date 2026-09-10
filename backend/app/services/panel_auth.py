@@ -25,40 +25,48 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.panel import PanelLoginAttempt, PanelSession, PanelUser
+from app.models.panel import PanelSession, PanelUser
 from app.security import hash_token, new_token, verify_password
+from app.services.panel_columns import (
+    IP_ADDRESS_LIMIT,
+    USER_AGENT_LIMIT,
+    normalise_email,
+    truncated,
+)
 from app.services.panel_errors import unavailable_on_database_failure
-
-
-class LoginFailure:
-    """Why an attempt failed, as stored in `panel_login_attempts.reason`.
-
-    Values, not an enum type in the database: see the column's comment in
-    `app.models.panel`. They are audit detail only and are never returned to
-    the client, which gets one generic answer instead.
-    """
-
-    UNKNOWN_ACCOUNT = "unknown_account"
-    BAD_PASSWORD = "bad_password"
-    NO_PASSWORD_SET = "no_password_set"
-    INACTIVE_ACCOUNT = "inactive_account"
-    LOCKED_ACCOUNT = "locked_account"
-    IP_THROTTLED = "ip_throttled"
+from app.services.panel_login_audit import LoginFailure, record_attempt
+from app.services.panel_two_factor import has_second_factor, verify_second_factor
 
 
 class AuthenticationFailed(Exception):
     """The credentials do not identify an account that may log in."""
 
 
-def normalise_email(email: str) -> str:
-    """Lowercase and strip, so one person cannot end up with two accounts.
+class SecondFactorRejected(AuthenticationFailed):
+    """The password was right; the code that came with it was not (T-83).
 
-    The local part of an address is case sensitive per RFC 5321, but no mail
-    provider anyone here uses treats it that way, and two accounts differing
-    only in capitalisation would be a genuine security problem in a panel where
-    every account is known by name.
+    A subclass, so anything that only knows `AuthenticationFailed` keeps
+    treating it as one refusal among many. The login endpoint tells it apart
+    for one reason: the alternative is telling somebody who mistyped six digits
+    that her address or password is wrong, which sends her to an administrator
+    for a password reset she does not need.
+
+    Telling it apart reveals nothing. This is reachable only after a correct
+    password, by a caller who already knows the account has a second factor
+    because the previous attempt said `second_factor_required` outright. The
+    lockout still charges the attempt, so the six digits are no easier to guess
+    than before.
     """
-    return email.strip().lower()
+
+
+class SecondFactorRequired(Exception):
+    """The password was right; this account also needs a code (T-83).
+
+    The one refusal that is not answered generically, and deliberately so: it is
+    only ever reached by somebody who already typed the correct password, so it
+    reveals nothing they did not already know, and without it the form has no
+    way to know it should ask for a code.
+    """
 
 
 def utcnow() -> datetime:
@@ -74,78 +82,6 @@ def as_utc(value: datetime) -> datetime:
     returning a wrong answer. Normalising on read keeps expiry checks total.
     """
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-_EMAIL_LIMIT = 320
-_IP_ADDRESS_LIMIT = 45
-_USER_AGENT_LIMIT = 255
-
-
-def _truncated(value: str | None, limit: int) -> str | None:
-    """Cut a value to what its column holds, keyed by this one function so a
-    limit only ever has to be gotten right in one place, not wherever a
-    caller happens to build the row."""
-    return value[:limit] if value else None
-
-
-def _record_attempt(
-    session: Session,
-    *,
-    email: str,
-    user: PanelUser | None,
-    succeeded: bool,
-    reason: str | None = None,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
-) -> None:
-    # Truncated to what the columns hold. An over-long header is either a
-    # bloated client or somebody probing, and neither deserves a 500 in place
-    # of an audit row. Every caller gets this, not just the one router that
-    # happens to trim the value on its way in.
-    session.add(
-        PanelLoginAttempt(
-            email=_truncated(email, _EMAIL_LIMIT),
-            panel_user_id=user.id if user is not None else None,
-            succeeded=succeeded,
-            reason=reason,
-            ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
-            user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
-        )
-    )
-
-
-@unavailable_on_database_failure
-def record_throttled_attempt(
-    session: Session,
-    *,
-    email: str,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
-) -> None:
-    """Record that an attempt was turned away by the per-IP throttle.
-
-    Without this, the requests refused before `login` runs leave no trace at
-    all, and `panel_login_attempts` goes quiet exactly when it matters: a real
-    flood would write at most one window's worth of rows and then nothing,
-    which reads afterwards like the attack stopped.
-
-    No account lookup, deliberately. This path exists to cost nothing, and
-    which address was typed is already the row's `email`; a caller that
-    wanted the account behind it can join on that later.
-
-    The caller is being refused, so nothing else is pending on this session
-    and committing here is safe.
-    """
-    _record_attempt(
-        session,
-        email=normalise_email(email),
-        user=None,
-        succeeded=False,
-        reason=LoginFailure.IP_THROTTLED,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-    session.commit()
 
 
 def find_by_email(session: Session, email: str) -> PanelUser | None:
@@ -197,6 +133,7 @@ def login(
     *,
     email: str,
     password: str,
+    code: str | None = None,
     ip_address: str | None = None,
     user_agent: str | None = None,
 ) -> tuple[PanelSession, str]:
@@ -220,7 +157,7 @@ def login(
     password_ok = verify_password(password, user.password_hash if user else None)
 
     if user is None:
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=None,
@@ -238,7 +175,7 @@ def login(
         # failure is the same generic one as a wrong password: a distinct
         # status here would tell an anonymous caller which addresses have an
         # account after a handful of requests.
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -262,7 +199,7 @@ def login(
             # for a wrong one. The reason recorded stays the real one either
             # way, so the audit trail still says somebody was guessing.
             _register_failure(session, user)
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -286,7 +223,7 @@ def login(
         # leave a reactivated account still locked out on its own correct
         # password. The wrong-password branch above skips the counter for a
         # deactivated account for that same reason.
-        _record_attempt(
+        record_attempt(
             session,
             email=address,
             user=user,
@@ -298,19 +235,52 @@ def login(
         session.commit()
         raise AuthenticationFailed("account is not active")
 
+    if has_second_factor(session, user):
+        # Checked last, after the password and the account state, so a caller
+        # who does not know the password cannot find out which accounts have
+        # 2FA switched on.
+        if not code:
+            record_attempt(
+                session,
+                email=address,
+                user=user,
+                succeeded=False,
+                reason=LoginFailure.SECOND_FACTOR_REQUIRED,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            session.commit()
+            raise SecondFactorRequired(address)
+        if not verify_second_factor(session, user, code):
+            # Charged against the lockout exactly like a wrong password. Six
+            # digits are guessable in a million tries, so a second factor with
+            # no limit behind it would be a weaker factor, not a second one.
+            _register_failure(session, user)
+            record_attempt(
+                session,
+                email=address,
+                user=user,
+                succeeded=False,
+                reason=LoginFailure.BAD_SECOND_FACTOR,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            session.commit()
+            raise SecondFactorRejected("wrong second factor")
+
     token = new_token()
     panel_session = PanelSession(
         panel_user=user,
         token_hash=hash_token(token),
         expires_at=now + timedelta(minutes=settings.panel_session_ttl_minutes),
-        ip_address=_truncated(ip_address, _IP_ADDRESS_LIMIT),
-        user_agent=_truncated(user_agent, _USER_AGENT_LIMIT),
+        ip_address=truncated(ip_address, IP_ADDRESS_LIMIT),
+        user_agent=truncated(user_agent, USER_AGENT_LIMIT),
     )
     user.failed_login_count = 0
     user.locked_until = None
     user.last_login_at = now
     session.add(panel_session)
-    _record_attempt(
+    record_attempt(
         session,
         email=address,
         user=user,
@@ -320,68 +290,3 @@ def login(
     )
     session.commit()
     return panel_session, token
-
-
-@unavailable_on_database_failure
-def resolve_session(session: Session, token: str) -> tuple[PanelUser, PanelSession] | None:
-    """Return the account behind a session token, or None if it cannot be used.
-
-    None covers every reason equally: unknown token, revoked, expired, or an
-    account deactivated since it logged in. The caller turns all of them into
-    the same 401, because the difference is not the client's business.
-
-    Deactivation is enforced here rather than only at logout time, so removing
-    someone's access does not depend on their session being revoked correctly
-    somewhere else.
-    """
-    row = session.execute(
-        select(PanelSession, PanelUser)
-        .join(PanelUser, PanelSession.panel_user_id == PanelUser.id)
-        .where(PanelSession.token_hash == hash_token(token))
-    ).one_or_none()
-    if row is None:
-        return None
-
-    panel_session, user = row
-    if panel_session.revoked_at is not None:
-        return None
-    if as_utc(panel_session.expires_at) <= utcnow():
-        return None
-    if not user.is_active:
-        return None
-    return user, panel_session
-
-
-@unavailable_on_database_failure
-def revoke_session(session: Session, panel_session: PanelSession) -> None:
-    """Log out. Idempotent: revoking an already revoked session keeps the
-    original timestamp, so the audit trail says when access actually ended."""
-    if panel_session.revoked_at is None:
-        panel_session.revoked_at = utcnow()
-    session.commit()
-
-
-def revoke_all_sessions(
-    session: Session, user: PanelUser, *, except_session_id: int | None = None
-) -> int:
-    """Revoke every live session of an account. Returns how many were closed.
-
-    Used wherever access has to stop everywhere at once: a password change, a
-    reset, a deactivation. `except_session_id` keeps the caller's own session
-    alive when they are changing their own password, so the sensible action
-    does not log the person out of the tab they are working in.
-    """
-    now = utcnow()
-    live = session.execute(
-        select(PanelSession).where(
-            PanelSession.panel_user_id == user.id,
-            PanelSession.revoked_at.is_(None),
-        )
-    ).scalars()
-    revoked = 0
-    for panel_session in live:
-        if except_session_id is not None and panel_session.id == except_session_id:
-            continue
-        panel_session.revoked_at = now
-        revoked += 1
-    return revoked

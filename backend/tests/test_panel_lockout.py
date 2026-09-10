@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.panel import PanelUser
-from app.services.panel_auth import LoginFailure
+from app.services.panel_login_audit import LoginFailure
 from tests.conftest import EDITOR_PASSWORD, attempts_for, log_in, make_panel_user
 
 

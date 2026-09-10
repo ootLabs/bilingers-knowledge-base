@@ -1,8 +1,11 @@
-// Polish dictionary, the only active locale (see docs/llm/i18n.md).
-// A second locale file must export the same shape: translations.ts types
-// its registry against this object, so a partial translation fails
-// `npm run typecheck` instead of silently falling back to the key.
-const pl = {
+// Everything a parent sees: the landing page, the chat, the shared error
+// vocabulary, and the routes that still hold placeholder copy.
+//
+// Split from the panel's half when the dictionary passed the size limit,
+// along the seam the product already has: two audiences who never read each
+// other's screens. `index.ts` puts them back together into one object, so
+// the completeness guarantee in `translations.ts` is unchanged.
+const parent = {
   common: {
     productName: "Bilingers",
     tagline: "Inteligentna baza wiedzy o dwujęzyczności",
@@ -106,4 +109,4 @@ const pl = {
   },
 } as const;
 
-export default pl;
+export default parent;

@@ -39,6 +39,14 @@ services:
       PANEL_LOGIN_IP_MAX_ATTEMPTS: ${PANEL_LOGIN_IP_MAX_ATTEMPTS:-20}
       PANEL_LOGIN_IP_WINDOW_MINUTES: ${PANEL_LOGIN_IP_WINDOW_MINUTES:-5}
       PRICING_FILE: ${PRICING_FILE:-/app/pricing.json}
+      # No default, deliberately, matching `app.config`: a key shipped here
+      # would be a shared key, which is the same as no encryption. Empty means
+      # enrolling in 2FA is refused rather than storing a secret in the clear,
+      # so this is the one variable a deployment has to fill in by hand.
+      PANEL_TOTP_ENCRYPTION_KEY: ${PANEL_TOTP_ENCRYPTION_KEY:-}
+      PANEL_TOTP_ISSUER: ${PANEL_TOTP_ISSUER:-Bilingers}
+      PANEL_BACKUP_CODE_COUNT: ${PANEL_BACKUP_CODE_COUNT:-10}
+      DOCX_IMPORT_MAX_BYTES: ${DOCX_IMPORT_MAX_BYTES:-5242880}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

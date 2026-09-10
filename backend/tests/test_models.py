@@ -191,6 +191,12 @@ class TestPersonalDataRegistry:
         assert personal_data_columns() == [
             ("chat_sessions", "token"),
             ("knowledge_gaps", "question"),
+            # The address as it was at the time, kept beside the foreign key so
+            # a journal line stays readable after the account is gone (T-89).
+            ("panel_audit_events", "actor_email"),
+            # Credentials belonging to one named person, the same reason
+            # `panel_users.password_hash` is marked (T-83).
+            ("panel_backup_codes", "code_hash"),
             # Who tried to get into the panel, from where and with what: an
             # address that matches no account is still a person's address.
             ("panel_login_attempts", "email"),
@@ -198,6 +204,7 @@ class TestPersonalDataRegistry:
             ("panel_login_attempts", "user_agent"),
             ("panel_sessions", "ip_address"),
             ("panel_sessions", "user_agent"),
+            ("panel_totp_secrets", "secret_encrypted"),
             ("panel_users", "email"),
             ("panel_users", "password_hash"),
             ("queries", "answer"),
