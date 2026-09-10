@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import StatusMessage from "@/components/StatusMessage";
 import StatusPill from "@/components/StatusPill";
@@ -58,6 +58,10 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
   const [saveFailure, setSaveFailure] = useState<PanelFailure | null>(null);
   const [savedAs, setSavedAs] = useState<VersionDetail | null>(null);
 
+  // Which read or save is the current one. A save cannot be cancelled, so an
+  // abort signal alone cannot order it against a read; a counter can.
+  const generation = useRef(0);
+
   /**
    * Re-read what the screen says about the document, and nothing else.
    *
@@ -68,8 +72,17 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
    * the box.
    */
   const refresh = useCallback(async (signal?: AbortSignal): Promise<DocumentDetail | null> => {
+    const mine = (generation.current += 1);
     try {
       const document = await getDocument(documentId, signal);
+      // Superseded while this was in the air, by another read or by a save.
+      // Publishing starts an unabortable read and the save button stays live
+      // beside it, so without this the older answer could land second and roll
+      // the header back to the version before the save, under a message
+      // announcing the version after it.
+      if (generation.current !== mine) {
+        return null;
+      }
       setState({
         phase: "ready",
         base: document.latestVersion,
@@ -77,6 +90,9 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
       });
       return document;
     } catch (error) {
+      if (generation.current !== mine) {
+        return null;
+      }
       const failure = recover(error);
       if (failure !== null) {
         setState({ phase: "failed", failure });
@@ -85,16 +101,33 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
     }
   }, [documentId, recover]);
 
-  // Opening the document: the same read, plus seeding the form from it. Seeding
-  // happens only here, because this is the one moment when there is no typed
-  // text that could be lost.
+  // WHICH document the form was filled from, not merely whether it was filled.
+  // The contract in one sentence: the box is seeded once per document, and the
+  // three cases it has to get right pull in different directions.
+  //
+  //   * moving to another document must reseed, or the previous document's
+  //     text stays in the box and the next save writes it as a version of the
+  //     new one,
+  //   * retrying a first load that failed must seed, or the box stays empty
+  //     for a document that has text,
+  //   * retrying a re-read that failed after publishing must NOT seed, because
+  //     the box then holds unsaved work and is the only copy of it.
+  //
+  // A plain boolean gets the last two right and the first one wrong, which is
+  // worse than the loss it was added to prevent. A ref rather than state,
+  // because seeding must not itself cause a render.
+  const seededFrom = useRef<number | null>(null);
+
+
+  // Opening a document, and the retry on the failure screen.
   const load = useCallback(async (signal?: AbortSignal) => {
     setState({ phase: "loading" });
     const document = await refresh(signal);
-    if (document !== null) {
+    if (document !== null && seededFrom.current !== documentId) {
+      seededFrom.current = documentId;
       setDraft(draftFrom(document.latestVersion));
     }
-  }, [refresh]);
+  }, [documentId, refresh]);
 
   useEffect(() => {
     // `documentId` comes from the route, so this callback changes when the
@@ -114,6 +147,9 @@ export default function DocumentEditor({ documentId }: { documentId: number }) {
     setSaving(true);
     setSaveFailure(null);
     setSavedAs(null);
+    // This save now owns the screen: any read already in the air describes the
+    // document as it was before it.
+    generation.current += 1;
     try {
       const version = await saveVersion(documentId, {
         title: draft.title.trim(),
