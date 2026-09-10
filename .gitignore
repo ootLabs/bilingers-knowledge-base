@@ -43,3 +43,8 @@ Thumbs.db
 # Real price list: operational config with a real rate and real prices.
 # Shape and instructions live in backend/pricing.example.json.
 backend/pricing.json
+
+# Block F planning notes: Polish prose kept on disk, deliberately untracked.
+# Without these two lines the next `git add -A` puts them straight back.
+/runbookblokf.md
+/podsumowanie-blok-f.md
