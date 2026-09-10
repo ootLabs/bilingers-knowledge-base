@@ -20,9 +20,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.panel import PanelLoginAttempt, PanelUser
 from app.models.two_factor import PanelTotpSecret
-from app.services import panel_two_factor
-from app.services.panel_auth import LoginFailure
-from app.services.panel_two_factor import _TOTP_INTERVAL
+from app.services import panel_totp, panel_two_factor
+from app.services.panel_login_audit import LoginFailure
+from app.services.panel_totp import TOTP_INTERVAL
 from tests.conftest import (
     ADMIN_PASSWORD,
     EDITOR_PASSWORD,
@@ -42,12 +42,18 @@ def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, datetime]:
-    """A clock the test moves by hand, for the service only.
+    """A clock the test moves by hand, for both halves of the service.
 
     Reaching the step either side of the current one is the whole point of the
     replay rule, and waiting half a minute inside a test is not an option.
     `pyotp` keeps its own reference to `datetime`, so codes are still generated
     against the real clock and the test says which moment it wants one for.
+
+    Both modules are patched, and that matters: `panel_totp.matched_step` is
+    what decides which step a code belongs to, and `panel_two_factor` is what
+    stamps a spent backup code. Freezing only one of them leaves the tests
+    reading two different clocks, which passes until a run happens to straddle
+    a real 30 second boundary.
     """
     state = {"now": datetime.now(UTC)}
 
@@ -57,6 +63,7 @@ def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, datetime]:
             return state["now"]
 
     monkeypatch.setattr(panel_two_factor, "datetime", Clock)
+    monkeypatch.setattr(panel_totp, "datetime", Clock)
     return state
 
 
@@ -77,7 +84,7 @@ def turn_on(
     be asking for the code that was just used up.
     """
     secret = enrol(client, token)
-    totp = pyotp.TOTP(secret, interval=_TOTP_INTERVAL)
+    totp = pyotp.TOTP(secret, interval=TOTP_INTERVAL)
     response = client.post(
         "/api/panel/users/me/two-factor/confirm",
         headers=auth_header(token),
@@ -238,12 +245,12 @@ class TestLoggingInWithIt:
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
         secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
 
-        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
+        frozen_clock["now"] += timedelta(seconds=TOTP_INTERVAL)
         response = sign_in(
             panel_client,
             panel_editor.email,
             EDITOR_PASSWORD,
-            pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"]),
+            pyotp.TOTP(secret, interval=TOTP_INTERVAL).at(frozen_clock["now"]),
         )
 
         assert response.status_code == 201
@@ -263,7 +270,7 @@ class TestLoggingInWithIt:
         only code that worked twice."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
         secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
-        used = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
+        used = pyotp.TOTP(secret, interval=TOTP_INTERVAL).at(frozen_clock["now"])
 
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, used
@@ -280,8 +287,8 @@ class TestLoggingInWithIt:
         of them, inside the same 30 second window."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
         secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
-        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
-        code = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
+        frozen_clock["now"] += timedelta(seconds=TOTP_INTERVAL)
+        code = pyotp.TOTP(secret, interval=TOTP_INTERVAL).at(frozen_clock["now"])
 
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
@@ -305,14 +312,14 @@ class TestLoggingInWithIt:
         seconds of reuse for something the module promises is single use."""
         token = log_in(panel_client, panel_editor.email, EDITOR_PASSWORD)
         secret, _codes = turn_on(panel_client, token, frozen_clock["now"])
-        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
-        code = pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])
+        frozen_clock["now"] += timedelta(seconds=TOTP_INTERVAL)
+        code = pyotp.TOTP(secret, interval=TOTP_INTERVAL).at(frozen_clock["now"])
 
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
         ).status_code == 201
 
-        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
+        frozen_clock["now"] += timedelta(seconds=TOTP_INTERVAL)
         assert sign_in(
             panel_client, panel_editor.email, EDITOR_PASSWORD, code
         ).status_code == 401
@@ -389,11 +396,11 @@ class TestTurningItOffAndRecovering:
         assert refused.status_code == 422
 
         # A fresh step, because confirming spent the previous one.
-        frozen_clock["now"] += timedelta(seconds=_TOTP_INTERVAL)
+        frozen_clock["now"] += timedelta(seconds=TOTP_INTERVAL)
         accepted = panel_client.post(
             "/api/panel/users/me/two-factor/disable",
             headers=auth_header(token),
-            json={"code": pyotp.TOTP(secret, interval=_TOTP_INTERVAL).at(frozen_clock["now"])},
+            json={"code": pyotp.TOTP(secret, interval=TOTP_INTERVAL).at(frozen_clock["now"])},
         )
         assert accepted.status_code == 204
 

@@ -15,7 +15,7 @@ from app.routers import (
     panel_users,
 )
 from app.services.panel_errors import PanelServiceUnavailable
-from app.services.panel_two_factor import TwoFactorNotConfigured
+from app.services.panel_totp import TwoFactorNotConfigured
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 

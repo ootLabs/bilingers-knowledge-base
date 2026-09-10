@@ -12,16 +12,18 @@ factor is a weaker one, not a second one.
 
 `app.services.panel_auth` calls `verify_second_factor` and nothing else here,
 so the dependency runs one way and this module never imports back.
+
+The cryptography and the codes themselves are `app.services.panel_totp`, split
+off when this file passed the size limit: that module works on strings and
+knows nothing about accounts, this one owns which account has a second factor
+and what happens when it is switched on or cleared.
 """
 
 from __future__ import annotations
 
-import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import pyotp
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -30,23 +32,16 @@ from app.models.panel import PanelUser
 from app.models.two_factor import PanelBackupCode, PanelTotpSecret
 from app.security import hash_token
 from app.services.panel_errors import unavailable_on_database_failure
-
-# No I, O, 0 or 1: these are read off paper and typed by hand, and telling them
-# apart is exactly the thing people get wrong.
-_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-_CODE_GROUPS = 3
-_GROUP_LENGTH = 4
-
-# TOTP's own step, and the tolerance either side of it. One step is 30 seconds,
-# so a window of 1 forgives a phone clock that is up to half a minute out
-# without widening the guessing surface to anything that matters.
-_TOTP_INTERVAL = 30
-_TOTP_WINDOW = 1
-
-
-class TwoFactorNotConfigured(Exception):
-    """The deployment has no encryption key, so no secret may be stored."""
-
+from app.services.panel_totp import (
+    TOTP_INTERVAL,
+    decrypt_secret,
+    encrypt_secret,
+    matched_step,
+    new_backup_code,
+    new_secret,
+    normalise_code,
+    provisioning_uri,
+)
 
 class TwoFactorAlreadyOn(Exception):
     """This account already has a confirmed second factor."""
@@ -68,19 +63,6 @@ class Enrolment:
     otpauth_uri: str
 
 
-def _cipher() -> Fernet:
-    key = settings.panel_totp_encryption_key.strip()
-    if not key:
-        # Loud rather than falling back to a default key: a shared default is
-        # the same as no encryption, and it would fail silently, which is the
-        # worst way for a credential store to fail.
-        raise TwoFactorNotConfigured("PANEL_TOTP_ENCRYPTION_KEY is not set")
-    try:
-        return Fernet(key.encode("ascii"))
-    except (ValueError, TypeError) as error:
-        raise TwoFactorNotConfigured("PANEL_TOTP_ENCRYPTION_KEY is not a valid key") from error
-
-
 def _secret_row(session: Session, user: PanelUser) -> PanelTotpSecret | None:
     return session.execute(
         select(PanelTotpSecret).where(PanelTotpSecret.panel_user_id == user.id)
@@ -99,24 +81,6 @@ def has_second_factor(session: Session, user: PanelUser) -> bool:
     return row is not None and row.confirmed_at is not None
 
 
-def _new_backup_code() -> str:
-    groups = [
-        "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_GROUP_LENGTH))
-        for _ in range(_CODE_GROUPS)
-    ]
-    return "-".join(groups)
-
-
-def normalise_code(code: str) -> str:
-    """One spelling of a code, whatever the person typed.
-
-    Dashes, spaces and case are how a code gets written down and read back; the
-    entropy is in the letters. Stripping them here means the hash is computed on
-    the same string at issue time and at use time.
-    """
-    return "".join(character for character in code.upper() if character.isalnum())
-
-
 @unavailable_on_database_failure
 def begin_enrolment(session: Session, user: PanelUser) -> Enrolment:
     """Mint a secret for this account and hand it over once, unconfirmed.
@@ -126,13 +90,13 @@ def begin_enrolment(session: Session, user: PanelUser) -> Enrolment:
     administrator. Replacing a confirmed one is not, because that would let
     anyone holding a live session swap out the second factor entirely.
     """
-    cipher = _cipher()
+    # Fails here if the deployment has no key, before a secret is minted.
+    secret = new_secret()
+    encrypted = encrypt_secret(secret)
     existing = _secret_row(session, user)
     if existing is not None and existing.confirmed_at is not None:
         raise TwoFactorAlreadyOn(user.email)
 
-    secret = pyotp.random_base32()
-    encrypted = cipher.encrypt(secret.encode("ascii")).decode("ascii")
     if existing is None:
         session.add(PanelTotpSecret(panel_user_id=user.id, secret_encrypted=encrypted))
     else:
@@ -140,45 +104,7 @@ def begin_enrolment(session: Session, user: PanelUser) -> Enrolment:
         existing.last_used_step = None
     session.commit()
 
-    return Enrolment(
-        secret=secret,
-        otpauth_uri=pyotp.TOTP(secret, interval=_TOTP_INTERVAL).provisioning_uri(
-            name=user.email, issuer_name=settings.panel_totp_issuer
-        ),
-    )
-
-
-def _decrypt(row: PanelTotpSecret) -> str:
-    try:
-        return _cipher().decrypt(row.secret_encrypted.encode("ascii")).decode("ascii")
-    except InvalidToken as error:
-        # The key changed, or the row came from another environment. Not the
-        # caller's fault and not something a different code would fix.
-        raise TwoFactorNotConfigured("stored secret cannot be read with this key") from error
-
-
-def _matched_step(secret: str, code: str) -> int | None:
-    """Which time step these digits belong to, or None if they belong to none.
-
-    The step the CODE belongs to, not the step the clock happens to be in, and
-    that distinction is the whole point. `verify(valid_window=1)` accepts the
-    previous and the next step as well, so recording the current clock step
-    would let the same digits through again the moment the clock rolled over:
-    used at step N it stored N, and at step N+1 the same code still verified
-    and N+1 > N passed the replay check. Sixty seconds of reuse for something
-    the comment below promises is single use.
-    """
-    totp = pyotp.TOTP(secret, interval=_TOTP_INTERVAL)
-    current = int(datetime.now(UTC).timestamp()) // _TOTP_INTERVAL
-    for step in range(current - _TOTP_WINDOW, current + _TOTP_WINDOW + 1):
-        # An aware timestamp, so pyotp converts through UTC rather than through
-        # the container's local time: the naive path goes via `mktime`, which
-        # picks the wrong offset for an ambiguous hour when a DST change lands
-        # in it, and every code would be refused for that hour.
-        moment = datetime.fromtimestamp(step * _TOTP_INTERVAL, UTC)
-        if totp.verify(code, for_time=moment):
-            return step
-    return None
+    return Enrolment(secret=secret, otpauth_uri=provisioning_uri(secret, account=user.email))
 
 
 def _totp_matches(row: PanelTotpSecret, code: str) -> bool:
@@ -188,7 +114,7 @@ def _totp_matches(row: PanelTotpSecret, code: str) -> bool:
     they belong to, so anybody who read them over a shoulder gets a second use
     out of them.
     """
-    step = _matched_step(_decrypt(row), code)
+    step = matched_step(decrypt_secret(row.secret_encrypted), code)
     if step is None:
         return False
     if row.last_used_step is not None and step <= row.last_used_step:
@@ -256,7 +182,7 @@ def confirm_enrolment(session: Session, user: PanelUser, code: str) -> list[str]
         raise InvalidSecondFactor(user.email)
 
     row.confirmed_at = datetime.now(UTC)
-    codes = [_new_backup_code() for _ in range(settings.panel_backup_code_count)]
+    codes = [new_backup_code() for _ in range(settings.panel_backup_code_count)]
     session.execute(
         PanelBackupCode.__table__.delete().where(PanelBackupCode.panel_user_id == user.id)
     )
