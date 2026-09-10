@@ -11,9 +11,17 @@ export default async function DocumentHistoryPage({
 }) {
   const t = getTranslations();
   const { id } = await params;
-  const documentId = Number.parseInt(id, 10);
 
-  if (!Number.isInteger(documentId) || documentId < 1) {
+  // Digits only, tested before parsing. `Number.parseInt` stops at the first
+  // character it cannot read, so "7abc", "7.9" and " 7" all came back as 7 and
+  // rendered document 7 under an address that means nothing.
+  if (!/^\d+$/.test(id)) {
+    notFound();
+  }
+  const documentId = Number.parseInt(id, 10);
+  // Zero and anything the database cannot hold as an id are the 404 screen
+  // straight away, rather than a request the backend could only refuse.
+  if (documentId < 1 || !Number.isSafeInteger(documentId)) {
     notFound();
   }
 
